@@ -30,5 +30,21 @@ export async function runStage6Tests() {
     assert(html.includes('rel="manifest"') && html.includes('viewport-fit=cover'), '頁面缺少 PWA 或手機安全區設定。');
     assert(app.includes("navigator.serviceWorker.register(new URL('./service-worker.js', import.meta.url))") && app.includes("document.readyState === 'complete'"), '應用未可靠地註冊 Service Worker。');
   });
+  await test('GitHub Pages 的 /Meowney/ 子路徑會正確解析 PWA 資源', async () => {
+    const [html, app, worker] = await Promise.all([read('index.html'), read('app.js'), read('service-worker.js')]);
+    const manifestUrl = new URL('manifest.webmanifest', 'https://meowmeowmeowcute.github.io/Meowney/');
+    const manifest = JSON.parse(await read('manifest.webmanifest'));
+    assert(new URL(manifest.start_url, manifestUrl).pathname === '/Meowney/', 'Manifest start_url 未保留 GitHub Pages 子路徑。');
+    assert(new URL(manifest.scope, manifestUrl).pathname === '/Meowney/', 'Manifest scope 未保留 GitHub Pages 子路徑。');
+    for (const icon of manifest.icons) {
+      assert(new URL(icon.src, manifestUrl).pathname.startsWith('/Meowney/icons/'), `圖示 ${icon.src} 未保留 GitHub Pages 子路徑。`);
+    }
+    assert(html.includes('href="manifest.webmanifest"') && html.includes('href="styles.css"') && html.includes('src="app.js"'), '頁面資源不是相對路徑。');
+    assert(new URL('./service-worker.js', 'https://meowmeowmeowcute.github.io/Meowney/app.js').pathname === '/Meowney/service-worker.js', 'Service Worker 註冊路徑會離開 GitHub Pages 子路徑。');
+    for (const asset of ['./', './index.html', './styles.css', './app.js', './data-layer.js', './query-logic.js', './backup-format.js', './manifest.webmanifest', './icons/meowney.svg', './icons/meowney-192.png', './icons/meowney-512.png']) {
+      assert(worker.includes(`'${asset}'`) && new URL(asset, manifestUrl).pathname.startsWith('/Meowney/'), `離線快取資源 ${asset} 未保留 GitHub Pages 子路徑。`);
+    }
+    assert(app.includes("new URL('./service-worker.js', import.meta.url)"), 'Service Worker 未使用模組相對路徑。');
+  });
   return results;
 }
