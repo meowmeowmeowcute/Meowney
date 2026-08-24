@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#111315" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Meowney 記帳</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/meowney.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icons/meowney-192.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <main id="app" class="app-content" tabindex="-1">
+        <section id="records-page" class="page page--active" aria-labelledby="records-title">
+          <header class="page-header">
+            <p class="eyebrow">交易紀錄</p>
+            <h1 id="records-title">全部</h1>
+          </header>
+          <section class="accounts-section" aria-labelledby="accounts-title">
+            <div class="section-heading">
+              <h2 id="accounts-title">帳戶</h2>
+              <span>點選帳戶切換紀錄</span>
+            </div>
+            <div id="account-list" class="account-list" aria-live="polite"></div>
+          </section>
+          <section class="transactions-section" aria-labelledby="transactions-title">
+            <div class="section-heading">
+              <h2 id="transactions-title">交易紀錄</h2>
+              <span id="transaction-count">所有帳戶</span>
+            </div>
+            <div id="transaction-list" class="transaction-list" aria-live="polite"></div>
+          </section>
+        </section>
+
+        <section id="query-page" class="page" aria-labelledby="query-title" hidden>
+          <header class="page-header">
+            <p class="eyebrow">依條件查看</p>
+            <h1 id="query-title">查詢</h1>
+          </header>
+          <section class="filter-card" aria-labelledby="query-conditions-title">
+            <h2 id="query-conditions-title">查詢條件</h2>
+            <div class="filter-grid">
+              <label>日期
+                <select id="query-date">
+                  <option value="all">全部時間</option>
+                  <option value="today">今天</option>
+                  <option value="month">本月</option>
+                  <option value="date">特定日期</option>
+                  <option value="specific-month">特定月份</option>
+                </select>
+              </label>
+              <label id="query-specific-date-field" hidden>特定日期
+                <input id="query-specific-date" type="date" />
+              </label>
+              <label id="query-specific-month-field" hidden>特定月份
+                <input id="query-specific-month" type="month" />
+              </label>
+              <label>類型
+                <select id="query-type">
+                  <option value="all">收入與支出</option>
+                  <option value="expense">僅支出</option>
+                  <option value="income">僅收入</option>
+                </select>
+              </label>
+              <label>帳戶
+                <select id="query-account"><option value="all">所有帳戶</option></select>
+              </label>
+              <label>母類別
+                <select id="query-parent"><option value="all">所有母類別</option></select>
+              </label>
+              <label>子類別
+                <select id="query-category"><option value="all">所有子類別</option></select>
+              </label>
+              <label>備註關鍵字
+                <input id="query-note" type="search" placeholder="包含文字" />
+              </label>
+              <label>最小金額
+                <input id="query-min" type="number" min="0" inputmode="decimal" placeholder="NT$ 0" />
+              </label>
+              <label>最大金額
+                <input id="query-max" type="number" min="0" inputmode="decimal" placeholder="不限" />
+              </label>
+            </div>
+            <button id="run-query" class="button button--primary button--full" type="button">套用條件</button>
+            <p id="query-error" class="form-error" role="alert" hidden></p>
+          </section>
+          <section class="query-results" aria-labelledby="query-result-title">
+            <h2 id="query-result-title">結果</h2>
+            <div class="summary-grid">
+              <article><span>總支出</span><strong id="query-expense">NT$ 0</strong></article>
+              <article><span>總收入</span><strong id="query-income">NT$ 0</strong></article>
+              <article><span>符合筆數</span><strong id="query-count">0</strong></article>
+            </div>
+            <p id="query-guidance" class="query-guidance">選擇母類別或子類別後，可查看已篩選的類別統計。</p>
+            <section id="parent-query-details" class="query-detail" hidden>
+              <div class="query-detail__heading"><h3 id="parent-query-title">母類別支出</h3><strong id="parent-query-total">NT$ 0</strong></div>
+              <div id="parent-query-list" class="query-list"></div>
+            </section>
+            <section id="subcategory-query-details" class="query-detail" hidden>
+              <div class="query-detail__heading"><h3 id="subcategory-query-title">子類別明細</h3><strong id="subcategory-query-total">NT$ 0</strong></div>
+              <p id="subcategory-query-count" class="query-detail__count">0 筆</p>
+              <div id="query-list" class="query-list"></div>
+            </section>
+          </section>
+        </section>
+
+        <section id="settings-page" class="page" aria-labelledby="settings-title" hidden>
+          <header class="page-header">
+            <p class="eyebrow">管理項目</p>
+            <h1 id="settings-title">設定</h1>
+          </header>
+          <section class="settings-group" aria-labelledby="settings-data-title">
+            <div class="settings-group-heading"><h2 id="settings-data-title">帳戶管理</h2><button id="new-account" class="text-action" type="button">新增</button></div>
+            <form id="account-form" class="management-form" hidden>
+              <input id="account-form-id" type="hidden" />
+              <label>帳戶名稱<input id="account-name-input" required maxlength="40" /></label>
+              <label>初始餘額<input id="account-balance-input" required type="number" inputmode="decimal" step="0.01" /></label>
+              <div><button class="button button--secondary" type="button" data-cancel-form="account">取消</button><button class="button button--primary" type="submit">儲存帳戶</button></div>
+            </form>
+            <div id="account-manager-list" class="manager-list"></div>
+          </section>
+          <section class="settings-group" aria-labelledby="parent-manager-title">
+            <div class="settings-group-heading"><h2 id="parent-manager-title">母類別管理</h2><button id="new-parent-category" class="text-action" type="button">新增</button></div>
+            <form id="parent-category-form" class="management-form" hidden>
+              <input id="parent-category-form-id" type="hidden" />
+              <label>母類別名稱<input id="parent-category-name-input" required maxlength="40" /></label>
+              <div><button class="button button--secondary" type="button" data-cancel-form="parent">取消</button><button class="button button--primary" type="submit">儲存母類別</button></div>
+            </form>
+            <div id="parent-category-manager-list" class="manager-list"></div>
+          </section>
+          <section class="settings-group" aria-labelledby="subcategory-manager-title">
+            <div class="settings-group-heading"><h2 id="subcategory-manager-title">子類別管理</h2><button id="new-subcategory" class="text-action" type="button">新增</button></div>
+            <form id="subcategory-form" class="management-form" hidden>
+              <input id="subcategory-form-id" type="hidden" />
+              <label>母類別<select id="subcategory-parent-input" required></select></label>
+              <label>子類別名稱<input id="subcategory-name-input" required maxlength="40" /></label>
+              <div><button class="button button--secondary" type="button" data-cancel-form="subcategory">取消</button><button class="button button--primary" type="submit">儲存子類別</button></div>
+            </form>
+            <div id="subcategory-manager-list" class="manager-list"></div>
+          </section>
+          <section class="settings-group" aria-labelledby="settings-file-title">
+            <h2 id="settings-file-title">資料管理</h2>
+            <div class="data-actions">
+              <div><b>JSON 完整備份與還原</b><small>備份包含帳戶、類別、交易、轉帳與設定；還原會完整覆蓋目前資料。</small></div>
+              <button id="export-json" class="button button--secondary" type="button">匯出 JSON</button>
+              <button id="import-json" class="button button--secondary" type="button">還原 JSON</button>
+            </div>
+            <input id="json-import-input" type="file" accept="application/json,.json" hidden />
+            <div class="data-actions data-actions--csv">
+              <div><b>CSV 交易匯出與匯入</b><small>先預覽新增、跳過、建立項目與衝突；確認後才會原子寫入。</small></div>
+              <button id="export-csv" class="button button--secondary" type="button">匯出 CSV</button>
+              <button id="preview-csv" class="button button--secondary" type="button">預覽 CSV</button>
+            </div>
+            <input id="csv-import-input" type="file" accept="text/csv,.csv" hidden />
+            <div id="csv-import-preview" class="csv-import-preview" hidden></div>
+            <button id="apply-csv-import" class="button button--primary button--full" type="button" hidden>確認匯入 CSV</button>
+          </section>
+        </section>
+      </main>
+
+      <button id="add-transaction" class="add-button" type="button" aria-haspopup="dialog">
+        <span aria-hidden="true">＋</span> 記帳
+      </button>
+
+      <nav class="bottom-nav" aria-label="主要導覽">
+        <button class="nav-item nav-item--active" type="button" data-page="records" aria-current="page"><span aria-hidden="true">⌂</span>紀錄</button>
+        <button class="nav-item" type="button" data-page="query"><span aria-hidden="true">⌕</span>查詢</button>
+        <button class="nav-item" type="button" data-page="settings"><span aria-hidden="true">☷</span>設定</button>
+      </nav>
+    </div>
+
+    <div id="sheet-overlay" class="sheet-overlay" hidden></div>
+    <section id="transaction-sheet" class="bottom-sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" hidden>
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <header class="sheet-header">
+        <div>
+          <p id="sheet-kicker" class="eyebrow">快速新增</p>
+          <h2 id="sheet-title">記一筆交易</h2>
+        </div>
+        <button id="close-sheet" class="icon-button" type="button" aria-label="關閉記帳面板">×</button>
+      </header>
+
+      <div class="sheet-body">
+        <div class="type-switch" role="group" aria-label="交易類型">
+          <button type="button" data-type="expense" class="type-switch__item type-switch__item--active">支出</button>
+          <button type="button" data-type="income" class="type-switch__item">收入</button>
+          <button type="button" data-type="transfer" class="type-switch__item">轉帳</button>
+        </div>
+
+        <section class="amount-section" aria-labelledby="amount-label">
+          <span id="amount-label">金額</span>
+          <output id="amount-display" class="amount-display">NT$ 0</output>
+        </section>
+
+        <section id="category-section" class="entry-section category-section" aria-labelledby="parent-category-label">
+          <div class="field-label">
+            <h3 id="parent-category-label">選擇類別 <em>必填</em></h3>
+            <span>先選母類別，再選子類別</span>
+          </div>
+          <div id="parent-options" class="parent-tabs" role="group" aria-label="母類別"></div>
+          <div id="category-options" class="category-grid" aria-live="polite"></div>
+        </section>
+
+        <section id="single-account-section" class="entry-section" aria-labelledby="account-label">
+          <h3 id="account-label">帳戶 <em>必填</em></h3>
+          <div id="account-options" class="chip-row"></div>
+        </section>
+
+        <section id="transfer-account-section" class="entry-section" hidden>
+          <h3>來源帳戶 <em>必填</em></h3>
+          <div id="source-account-options" class="chip-row"></div>
+          <h3>目的帳戶 <em>必填</em></h3>
+          <div id="target-account-options" class="chip-row"></div>
+        </section>
+
+        <label class="note-field">備註（選填）
+          <textarea id="note-input" rows="2" placeholder="例如：午餐、薪水入帳"></textarea>
+        </label>
+
+        <button id="toggle-date-time" class="date-toggle" type="button"><span>日期與時間</span><strong id="date-time-summary"></strong><i aria-hidden="true">›</i></button>
+        <div id="date-time-fields" class="date-time-fields" hidden>
+          <label>日期<input id="date-input" type="date" /></label>
+          <label>時間<input id="time-input" type="time" /></label>
+        </div>
+
+        <p id="form-error" class="form-error" role="alert" hidden></p>
+
+        <div class="number-pad" aria-label="螢幕數字鍵盤">
+          <button type="button" data-key="1">1</button><button type="button" data-key="2">2</button><button type="button" data-key="3">3</button>
+          <button type="button" data-key="4">4</button><button type="button" data-key="5">5</button><button type="button" data-key="6">6</button>
+          <button type="button" data-key="7">7</button><button type="button" data-key="8">8</button><button type="button" data-key="9">9</button>
+          <button type="button" data-key=".">.</button><button type="button" data-key="0">0</button><button type="button" data-key="backspace" aria-label="刪除一個數字">⌫</button>
+        </div>
+        <div class="sheet-actions">
+          <button id="delete-transaction" class="button button--danger" type="button" hidden>刪除</button>
+          <button id="save-transaction" class="button button--primary" type="button">確定</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="confirm-dialog" class="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" hidden>
+      <h2 id="confirm-title">刪除這筆交易？</h2>
+      <p>刪除後無法復原。</p>
+      <div>
+        <button id="cancel-delete" class="button button--secondary" type="button">取消</button>
+        <button id="confirm-delete" class="button button--danger" type="button">確認刪除</button>
+      </div>
+    </section>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

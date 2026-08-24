@@ -1,0 +1,17 @@
+{
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"test": "node tests/run-node-tests.mjs",
+		"test:stage2": "node tests/run-node-tests.mjs stage2",
+		"test:stage3": "node tests/run-node-tests.mjs stage3",
+		"test:stage4": "node tests/run-node-tests.mjs stage4",
+		"test:stage5": "node tests/run-node-tests.mjs stage5",
+		"test:stage6": "node tests/run-node-tests.mjs stage6",
+		"test:stage7": "node tests/run-node-tests.mjs stage7",
+		"test:stage8": "node tests/run-node-tests.mjs stage8"
+	},
+	"devDependencies": {
+		"fake-indexeddb": "^6.2.5"
+	}
+}

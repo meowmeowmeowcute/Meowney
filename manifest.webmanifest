@@ -1,0 +1,32 @@
+{
+  "name": "Meowney 記帳",
+  "short_name": "Meowney",
+  "description": "本機離線日常記帳工具",
+  "lang": "zh-Hant",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#090b0c",
+  "theme_color": "#111315",
+  "icons": [
+    {
+      "src": "icons/meowney-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/meowney-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/meowney.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

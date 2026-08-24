@@ -1,0 +1,404 @@
+export const BACKUP_FORMAT = 'meowney-backup';
+export const BACKUP_VERSION = 1;
+export const CSV_COLUMNS = [
+  '交易識別', '類型', '金額', '帳戶ID', '帳戶', '來源帳戶ID', '來源帳戶', '目的帳戶ID', '目的帳戶', '母類別ID', '母類別', '子類別ID', '子類別', '日期', '時間', '備註',
+];
+
+const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+const text = (value) => typeof value === 'string' && value.trim();
+const dateValue = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+const timeValue = (value) => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+
+function fail(message) { throw new Error(message); }
+function requireArray(value, label) { if (!Array.isArray(value)) fail(`${label}必須是陣列。`); return value; }
+function requireId(value, label) { if (!text(value)) fail(`${label}缺少識別碼。`); return value; }
+function requireName(value, label) { if (!text(value)) fail(`${label}缺少名稱。`); return value; }
+function requireTimestamp(value, label) { if (!text(value)) fail(`${label}缺少時間資訊。`); return value; }
+function requireUnique(records, label) {
+  const ids = new Set();
+  for (const record of records) {
+    if (!isObject(record)) fail(`${label}資料格式錯誤。`);
+    const id = requireId(record.id, label);
+    if (ids.has(id)) fail(`${label}出現重複識別碼。`);
+    ids.add(id);
+  }
+  return ids;
+}
+
+function validateBaseRecord(record, label) {
+  if (!isObject(record)) fail(`${label}資料格式錯誤。`);
+  requireId(record.id, label);
+  requireTimestamp(record.createdAt, label);
+  requireTimestamp(record.updatedAt, label);
+}
+
+function validateBackupData(data) {
+  if (!isObject(data)) fail('備份資料結構錯誤。');
+  const accounts = requireArray(data.accounts, '帳戶');
+  const parentCategories = requireArray(data.parentCategories, '母類別');
+  const subcategories = requireArray(data.subcategories, '子類別');
+  const transactions = requireArray(data.transactions, '交易');
+  const settings = requireArray(data.settings, '設定');
+  const accountIds = requireUnique(accounts, '帳戶');
+  const parentIds = requireUnique(parentCategories, '母類別');
+  const subcategoryIds = requireUnique(subcategories, '子類別');
+  const transactionIds = requireUnique(transactions, '交易');
+  if (transactionIds.size !== transactions.length) fail('交易識別碼重複。');
+  for (const account of accounts) {
+    validateBaseRecord(account, '帳戶');
+    requireName(account.name, '帳戶');
+    if (!Number.isFinite(account.initialBalance)) fail('帳戶初始餘額格式錯誤。');
+  }
+  for (const parent of parentCategories) {
+    validateBaseRecord(parent, '母類別');
+    requireName(parent.name, '母類別');
+  }
+  for (const category of subcategories) {
+    validateBaseRecord(category, '子類別');
+    requireName(category.name, '子類別');
+    if (!parentIds.has(category.parentCategoryId)) fail('子類別關聯的母類別不存在。');
+  }
+  for (const transaction of transactions) {
+    validateBaseRecord(transaction, '交易');
+    if (!['expense', 'income', 'transfer'].includes(transaction.type)) fail('交易類型錯誤。');
+    if (!Number.isFinite(transaction.amount) || transaction.amount <= 0) fail('交易金額必須大於 0。');
+    if (!dateValue(transaction.date) || !timeValue(transaction.time) || transaction.dateTime !== `${transaction.date}T${transaction.time}`) fail('交易日期或時間格式錯誤。');
+    if (typeof transaction.note !== 'string' || !Array.isArray(transaction.accountIds)) fail('交易欄位格式錯誤。');
+    if (transaction.type === 'transfer') {
+      requireId(transaction.sourceAccountId, '轉帳來源帳戶');
+      requireId(transaction.targetAccountId, '轉帳目的帳戶');
+      requireName(transaction.sourceAccountNameSnapshot, '轉帳來源帳戶快照');
+      requireName(transaction.targetAccountNameSnapshot, '轉帳目的帳戶快照');
+      if (transaction.sourceAccountId === transaction.targetAccountId || transaction.accountIds.length !== 2 || !transaction.accountIds.includes(transaction.sourceAccountId) || !transaction.accountIds.includes(transaction.targetAccountId)) fail('轉帳帳戶關聯錯誤。');
+    } else {
+      requireId(transaction.accountId, '交易帳戶');
+      requireId(transaction.parentCategoryId, '交易母類別');
+      requireId(transaction.subcategoryId, '交易子類別');
+      requireName(transaction.accountNameSnapshot, '交易帳戶快照');
+      requireName(transaction.parentCategoryNameSnapshot, '交易母類別快照');
+      requireName(transaction.subcategoryNameSnapshot, '交易子類別快照');
+      if (transaction.accountIds.length !== 1 || transaction.accountIds[0] !== transaction.accountId) fail('交易帳戶關聯錯誤。');
+      const category = subcategories.find((item) => item.id === transaction.subcategoryId);
+      if (category && category.parentCategoryId !== transaction.parentCategoryId) fail('交易子類別與母類別關聯錯誤。');
+      if (accountIds.has(transaction.accountId) === false && !text(transaction.accountNameSnapshot)) fail('已刪除帳戶缺少歷史快照。');
+      if (parentIds.has(transaction.parentCategoryId) === false && !text(transaction.parentCategoryNameSnapshot)) fail('已刪除母類別缺少歷史快照。');
+      if (subcategoryIds.has(transaction.subcategoryId) === false && !text(transaction.subcategoryNameSnapshot)) fail('已刪除子類別缺少歷史快照。');
+    }
+  }
+  const settingKeys = new Set();
+  for (const setting of settings) {
+    if (!isObject(setting) || !text(setting.key) || !hasOwn(setting, 'value') || !text(setting.updatedAt) || settingKeys.has(setting.key)) fail('設定資料格式錯誤。');
+    settingKeys.add(setting.key);
+  }
+  return { accounts, parentCategories, subcategories, transactions, settings };
+}
+
+export function createBackup(snapshot, exportedAt = new Date().toISOString()) {
+  return {
+    format: BACKUP_FORMAT,
+    version: BACKUP_VERSION,
+    exportedAt,
+    data: {
+      accounts: snapshot.accounts,
+      parentCategories: snapshot.parentCategories,
+      subcategories: snapshot.subcategories,
+      transactions: snapshot.transactions,
+      settings: snapshot.settings,
+    },
+  };
+}
+
+export function validateBackup(backup) {
+  try {
+    if (!isObject(backup) || backup.format !== BACKUP_FORMAT || backup.version !== BACKUP_VERSION || !text(backup.exportedAt)) fail('備份格式或版本不支援。');
+    return { valid: true, data: validateBackupData(backup.data) };
+  } catch (error) {
+    return { valid: false, error: error.message || '備份檔格式錯誤。' };
+  }
+}
+
+export function parseBackupText(fileText) {
+  try {
+    return validateBackup(JSON.parse(fileText));
+  } catch {
+    return { valid: false, error: '無法讀取 JSON 備份檔。' };
+  }
+}
+
+function csvCell(value) {
+  const content = String(value ?? '');
+  return /[",\r\n]/.test(content) ? `"${content.replaceAll('"', '""')}"` : content;
+}
+
+export function exportTransactionsCsv(transactions) {
+  const rows = transactions.map((transaction) => transaction.type === 'transfer'
+    ? [transaction.id, transaction.type, transaction.amount, '', '', transaction.sourceAccountId, transaction.sourceAccountNameSnapshot, transaction.targetAccountId, transaction.targetAccountNameSnapshot, '', '', '', '', transaction.date, transaction.time, transaction.note]
+    : [transaction.id, transaction.type, transaction.amount, transaction.accountId, transaction.accountNameSnapshot, '', '', '', '', transaction.parentCategoryId, transaction.parentCategoryNameSnapshot, transaction.subcategoryId, transaction.subcategoryNameSnapshot, transaction.date, transaction.time, transaction.note]);
+  return `\uFEFF${[CSV_COLUMNS, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n')}\r\n`;
+}
+
+export function parseCsv(fileText) {
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let quoted = false;
+  for (let index = 0; index < fileText.length; index += 1) {
+    const character = fileText[index];
+    if (quoted) {
+      if (character === '"' && fileText[index + 1] === '"') { cell += '"'; index += 1; }
+      else if (character === '"') quoted = false;
+      else cell += character;
+      continue;
+    }
+    if (character === '"') { quoted = true; continue; }
+    if (character === ',') { row.push(cell); cell = ''; continue; }
+    if (character === '\r' || character === '\n') {
+      if (character === '\r' && fileText[index + 1] === '\n') index += 1;
+      row.push(cell); cell = '';
+      if (row.some((value) => value !== '') || row.length > 1) rows.push(row);
+      row = [];
+      continue;
+    }
+    cell += character;
+  }
+  if (quoted) throw new Error('CSV 的引號未正確結束。');
+  if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+  if (!rows.length) throw new Error('CSV 檔案沒有內容。');
+  const [headers, ...dataRows] = rows;
+  headers[0] = headers[0].replace(/^\uFEFF/, '');
+  return { headers, rows: dataRows };
+}
+
+const csvText = (value) => String(value ?? '').trim();
+const emptyCsvReferences = (record, keys) => keys.every((key) => !record[key]);
+
+function parseCsvRecords(fileText) {
+  const parsed = parseCsv(fileText);
+  if (parsed.headers.length !== CSV_COLUMNS.length || parsed.headers.some((header, index) => header !== CSV_COLUMNS[index])) fail('CSV 欄名或欄位順序不符合 Meowney 標準格式。');
+  return parsed.rows.map((row, index) => {
+    const line = index + 2;
+    if (row.length !== CSV_COLUMNS.length) fail(`CSV 第 ${line} 列欄位數量錯誤。`);
+    const raw = Object.fromEntries(CSV_COLUMNS.map((column, columnIndex) => [column, row[columnIndex]]));
+    const record = {
+      line,
+      id: csvText(raw.交易識別),
+      type: csvText(raw.類型),
+      amount: Number(raw.金額),
+      accountId: csvText(raw.帳戶ID),
+      accountName: csvText(raw.帳戶),
+      sourceAccountId: csvText(raw.來源帳戶ID),
+      sourceAccountName: csvText(raw.來源帳戶),
+      targetAccountId: csvText(raw.目的帳戶ID),
+      targetAccountName: csvText(raw.目的帳戶),
+      parentCategoryId: csvText(raw.母類別ID),
+      parentCategoryName: csvText(raw.母類別),
+      subcategoryId: csvText(raw.子類別ID),
+      subcategoryName: csvText(raw.子類別),
+      date: csvText(raw.日期),
+      time: csvText(raw.時間),
+      note: String(raw.備註 ?? '').trim(),
+    };
+    if (!record.id || !['expense', 'income', 'transfer'].includes(record.type) || !Number.isFinite(record.amount) || record.amount <= 0 || !dateValue(record.date) || !timeValue(record.time)) {
+      fail(`CSV 第 ${line} 列的交易識別、類型、金額、日期或時間錯誤。`);
+    }
+    if (record.type === 'transfer') {
+      if (!record.sourceAccountName || !record.targetAccountName || record.sourceAccountName === record.targetAccountName || !emptyCsvReferences(record, ['accountId', 'accountName', 'parentCategoryId', 'parentCategoryName', 'subcategoryId', 'subcategoryName'])) {
+        fail(`CSV 第 ${line} 列的轉帳帳戶或關聯欄位錯誤。`);
+      }
+    } else if (!record.accountName || !record.parentCategoryName || !record.subcategoryName || !emptyCsvReferences(record, ['sourceAccountId', 'sourceAccountName', 'targetAccountId', 'targetAccountName'])) {
+      fail(`CSV 第 ${line} 列的一般交易關聯欄位錯誤。`);
+    }
+    return record;
+  });
+}
+
+function csvPreview(records) {
+  return records.slice(0, 5).map((record) => ({
+    type: record.type,
+    amount: record.amount,
+    date: record.date,
+    description: record.type === 'transfer' ? `${record.sourceAccountName} → ${record.targetAccountName}` : `${record.parentCategoryName}／${record.subcategoryName}`,
+  }));
+}
+
+function duplicateRecordIssues(records) {
+  const ids = new Set();
+  return records.flatMap((record) => {
+    if (ids.has(record.id)) return [`CSV 第 ${record.line} 列交易識別與 CSV 內其他列重複。`];
+    ids.add(record.id);
+    return [];
+  });
+}
+
+function csvRecordMatchesTransaction(record, transaction) {
+  const sameBase = record.type === transaction.type && record.amount === transaction.amount && record.date === transaction.date && record.time === transaction.time && record.note === (transaction.note || '');
+  if (!sameBase) return false;
+  if (record.type === 'transfer') {
+    return record.sourceAccountName === transaction.sourceAccountNameSnapshot
+      && record.targetAccountName === transaction.targetAccountNameSnapshot
+      && (!record.sourceAccountId || record.sourceAccountId === transaction.sourceAccountId)
+      && (!record.targetAccountId || record.targetAccountId === transaction.targetAccountId);
+  }
+  return record.accountName === transaction.accountNameSnapshot
+    && record.parentCategoryName === transaction.parentCategoryNameSnapshot
+    && record.subcategoryName === transaction.subcategoryNameSnapshot
+    && (!record.accountId || record.accountId === transaction.accountId)
+    && (!record.parentCategoryId || record.parentCategoryId === transaction.parentCategoryId)
+    && (!record.subcategoryId || record.subcategoryId === transaction.subcategoryId);
+}
+
+function uniqueNames(records, label) {
+  const byName = new Map();
+  for (const record of records) {
+    const name = record.name;
+    if (!byName.has(name)) byName.set(name, record);
+    else byName.set(name, null);
+  }
+  return { byName, label };
+}
+
+function planFromRecords(records, snapshot) {
+  if (!snapshot || !Array.isArray(snapshot.accounts) || !Array.isArray(snapshot.parentCategories) || !Array.isArray(snapshot.subcategories) || !Array.isArray(snapshot.transactions)) fail('目前資料庫狀態錯誤，請重新整理後再試。');
+  const accountsById = new Map(snapshot.accounts.map((item) => [item.id, { ...item, planned: false }]));
+  const parentsById = new Map(snapshot.parentCategories.map((item) => [item.id, { ...item, planned: false }]));
+  const categoriesById = new Map(snapshot.subcategories.map((item) => [item.id, { ...item, planned: false }]));
+  const accountsByName = uniqueNames(snapshot.accounts, '帳戶');
+  const parentsByName = uniqueNames(snapshot.parentCategories, '母類別');
+  const categoryByParentAndName = new Map();
+  for (const category of snapshot.subcategories) {
+    const key = `${category.parentCategoryId}\u0000${category.name}`;
+    categoryByParentAndName.set(key, categoryByParentAndName.has(key) ? null : { ...category, planned: false });
+  }
+  const accountsToCreate = [];
+  const parentCategoriesToCreate = [];
+  const subcategoriesToCreate = [];
+  const transactionsToCreate = [];
+  const resolveAccount = (id, name) => {
+    if (id && accountsById.has(id)) {
+      const account = accountsById.get(id);
+      if (account.planned && account.name !== name) fail(`帳戶識別碼 ${id} 在 CSV 中對應不同名稱。`);
+      return account;
+    }
+    const named = accountsByName.byName.get(name);
+    if (named === null) fail(`帳戶名稱「${name}」不唯一，無法安全匯入。`);
+    if (named) return named;
+    const account = { id: id || crypto.randomUUID(), name, planned: true };
+    accountsById.set(account.id, account);
+    accountsByName.byName.set(name, account);
+    accountsToCreate.push(account);
+    return account;
+  };
+  const resolveParent = (id, name) => {
+    if (id && parentsById.has(id)) {
+      const parent = parentsById.get(id);
+      if (parent.planned && parent.name !== name) fail(`母類別識別碼 ${id} 在 CSV 中對應不同名稱。`);
+      return parent;
+    }
+    const named = parentsByName.byName.get(name);
+    if (named === null) fail(`母類別名稱「${name}」不唯一，無法安全匯入。`);
+    if (named) return named;
+    const parent = { id: id || crypto.randomUUID(), name, planned: true };
+    parentsById.set(parent.id, parent);
+    parentsByName.byName.set(name, parent);
+    parentCategoriesToCreate.push(parent);
+    return parent;
+  };
+  const resolveSubcategory = (id, parent, name) => {
+    if (id && categoriesById.has(id)) {
+      const category = categoriesById.get(id);
+      if (category.parentCategoryId !== parent.id || (category.planned && category.name !== name)) fail(`子類別識別碼 ${id} 的母類別或名稱關聯錯誤。`);
+      return category;
+    }
+    const key = `${parent.id}\u0000${name}`;
+    const named = categoryByParentAndName.get(key);
+    if (named === null) fail(`子類別「${name}」在母類別「${parent.name}」下不唯一，無法安全匯入。`);
+    if (named) return named;
+    const category = { id: id || crypto.randomUUID(), parentCategoryId: parent.id, name, planned: true };
+    categoriesById.set(category.id, category);
+    categoryByParentAndName.set(key, category);
+    subcategoriesToCreate.push(category);
+    return category;
+  };
+  const existingTransactions = new Map(snapshot.transactions.map((transaction) => [transaction.id, transaction]));
+  const skippedTransactionIds = new Set();
+  const skippedTransactions = [];
+  const issues = duplicateRecordIssues(records);
+  const duplicateIds = new Set(records.filter((record, index) => records.findIndex((candidate) => candidate.id === record.id) !== index).map((record) => record.id));
+  for (const record of records) {
+    if (duplicateIds.has(record.id)) continue;
+    const existing = existingTransactions.get(record.id);
+    if (existing) {
+      if (csvRecordMatchesTransaction(record, existing)) {
+        skippedTransactionIds.add(record.id);
+        skippedTransactions.push(record);
+      }
+      else issues.push(`CSV 第 ${record.line} 列交易識別已存在，但內容不同。`);
+      continue;
+    }
+    try {
+      if (record.type === 'transfer') {
+        const source = resolveAccount(record.sourceAccountId, record.sourceAccountName);
+        const target = resolveAccount(record.targetAccountId, record.targetAccountName);
+        if (source.id === target.id) fail('轉帳來源與目的帳戶不可相同。');
+        transactionsToCreate.push({
+          id: record.id, type: record.type, amount: record.amount, date: record.date, time: record.time, note: record.note,
+          sourceAccountId: source.id, sourceAccountNameSnapshot: record.sourceAccountName,
+          targetAccountId: target.id, targetAccountNameSnapshot: record.targetAccountName,
+        });
+      } else {
+        const account = resolveAccount(record.accountId, record.accountName);
+        const parent = resolveParent(record.parentCategoryId, record.parentCategoryName);
+        const category = resolveSubcategory(record.subcategoryId, parent, record.subcategoryName);
+        transactionsToCreate.push({
+          id: record.id, type: record.type, amount: record.amount, date: record.date, time: record.time, note: record.note,
+          accountId: account.id, accountNameSnapshot: record.accountName,
+          parentCategoryId: parent.id, parentCategoryNameSnapshot: record.parentCategoryName,
+          subcategoryId: category.id, subcategoryNameSnapshot: record.subcategoryName,
+        });
+      }
+    } catch (error) {
+      issues.push(`CSV 第 ${record.line} 列：${error.message || '關聯資料錯誤。'}`);
+    }
+  }
+  const summary = {
+    newTransactions: transactionsToCreate.length,
+    skippedTransactions: skippedTransactionIds.size,
+    createdAccounts: accountsToCreate.length,
+    createdParentCategories: parentCategoriesToCreate.length,
+    createdSubcategories: subcategoriesToCreate.length,
+    conflictCount: issues.length,
+  };
+  if (issues.length) return { valid: false, error: issues[0], issues, summary, preview: csvPreview(records) };
+  return {
+    valid: true,
+    summary,
+    preview: csvPreview(records),
+    plan: { accountsToCreate, parentCategoriesToCreate, subcategoriesToCreate, skippedTransactions, transactionsToCreate },
+  };
+}
+
+export function validateCsvImport(fileText) {
+  try {
+    const records = parseCsvRecords(fileText);
+    const issues = duplicateRecordIssues(records);
+    if (issues.length) return { valid: false, error: issues[0], conflictCount: issues.length, preview: csvPreview(records) };
+    return { valid: true, recordCount: records.length, preview: csvPreview(records) };
+  } catch (error) {
+    return { valid: false, error: error.message || 'CSV 格式錯誤。', conflictCount: 1 };
+  }
+}
+
+export function planCsvImport(fileText, snapshot) {
+  try {
+    return planFromRecords(parseCsvRecords(fileText), snapshot);
+  } catch (error) {
+    return {
+      valid: false,
+      error: error.message || 'CSV 格式錯誤。',
+      issues: [error.message || 'CSV 格式錯誤。'],
+      summary: { newTransactions: 0, skippedTransactions: 0, createdAccounts: 0, createdParentCategories: 0, createdSubcategories: 0, conflictCount: 1 },
+      preview: [],
+    };
+  }
+}

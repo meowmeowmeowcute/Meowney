@@ -1,0 +1,45 @@
+# Dependency caches
+node_modules/
+.pnpm-store/
+
+# Temporary files and editor state
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+tmp/
+temp/
+
+# Test and coverage output
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+
+# Local backups and exported bookkeeping data
+backups/
+exports/
+*.bak
+*.backup
+*.backup.json
+*.backup.csv
+Meowney-完整備份-*.json
+Meowney-交易匯出-*.csv
+
+# Environment files and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.token
+secrets/
+
+# Package-manager diagnostics
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
