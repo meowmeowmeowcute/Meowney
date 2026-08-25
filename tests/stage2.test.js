@@ -47,11 +47,12 @@ export async function runStage2Tests() {
       assert((await repository.listAccounts()).length === 2, '重新開啟後帳戶沒有保留。');
     });
 
-    await test('支出、收入與轉帳可由交易正確推導帳戶餘額', async () => {
+    await test('支出、無類別收入與轉帳可由交易正確推導帳戶餘額', async () => {
       await repository.createTransaction({ type: 'expense', amount: 100, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, date: '2026-08-23', time: '09:00' });
-      await repository.createTransaction({ type: 'income', amount: 40, accountId: bank.id, parentCategoryId: food.id, subcategoryId: meal.id, date: '2026-08-23', time: '10:00' });
+      const income = await repository.createTransaction({ type: 'income', amount: 40, accountId: bank.id, date: '2026-08-23', time: '10:00' });
       await repository.createTransaction({ type: 'transfer', amount: 250, sourceAccountId: cash.id, targetAccountId: bank.id, date: '2026-08-23', time: '11:00' });
       const balances = calculateAccountBalances(await repository.listAccounts(), await repository.listTransactions());
+      assert(income.parentCategoryId === null && income.subcategoryId === null, '收入不應要求或寫入類別關聯。');
       assert(balances.get(cash.id) === 650, '現金餘額計算錯誤。');
       assert(balances.get(bank.id) === 490, '銀行餘額計算錯誤。');
       assert([...balances.values()].reduce((total, amount) => total + amount, 0) === 1140, '轉帳改變了所有帳戶合計。');

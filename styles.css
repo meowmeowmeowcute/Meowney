@@ -153,7 +153,7 @@ textarea { padding: 11px; resize: vertical; }
 .type-switch { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; padding: 5px; border-radius: 15px; background: #090c0d; }
 .type-switch__item { min-height: 42px; border: 0; border-radius: 11px; background: transparent; color: var(--muted); font-size: 15px; font-weight: 800; }
 .type-switch__item--active { background: #454a4c; color: var(--text); box-shadow: 0 2px 4px rgba(0, 0, 0, .28); }
-.amount-section { display: grid; justify-items: center; gap: 6px; margin: 17px 0 19px; }
+.amount-section { position: sticky; top: 0; z-index: 2; display: grid; justify-items: center; gap: 6px; margin: 0 -18px 19px; padding: 17px 18px 13px; background: #171a1c; box-shadow: 0 8px 16px rgba(0, 0, 0, .22); }
 .amount-section > span { color: var(--muted); font-size: 12px; }
 .amount-display { font-size: 36px; font-variant-numeric: tabular-nums; font-weight: 850; letter-spacing: -.05em; }
 .entry-section { margin: 20px 0; }

@@ -32,7 +32,7 @@ export async function runStage7Tests() {
     const food = await source.createParentCategory({ name: '吃喝' });
     const meal = await source.createSubcategory({ parentCategoryId: food.id, name: '餐飲' });
     await source.createTransaction({ type: 'expense', amount: 125.5, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '含逗號, 換行\n與 "引號"', date: '2026-08-24', time: '12:30' });
-    await source.createTransaction({ type: 'income', amount: 300, accountId: bank.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '餐費補助', date: '2026-08-25', time: '09:00' });
+    await source.createTransaction({ type: 'income', amount: 300, accountId: bank.id, note: '餐費補助', date: '2026-08-25', time: '09:00' });
     await source.createTransaction({ type: 'transfer', amount: 80, sourceAccountId: bank.id, targetAccountId: cash.id, note: '轉存', date: '2026-08-25', time: '18:00' });
     await source.setSetting('initial-parent-categories-created', true);
     const sourceSnapshot = await source.getSnapshot();
@@ -47,7 +47,7 @@ export async function runStage7Tests() {
       const balances = calculateAccountBalances(restored.accounts, restored.transactions);
       assert(balances.get(cash.id) === 954.5 && balances.get(bank.id) === 720, '還原後帳戶餘額錯誤。');
       const query = runTransactionQuery(restored.transactions, { parentCategoryId: food.id }, '2026-08-25');
-      assert(query.expenseTotal === 125.5 && query.incomeTotal === 300, '還原後查詢結果錯誤。');
+      assert(query.expenseTotal === 125.5 && query.incomeTotal === 0, '無類別收入不應被母類別查詢納入。');
     });
 
     await test('無效 JSON 備份不會修改既有資料', async () => {
@@ -74,6 +74,8 @@ export async function runStage7Tests() {
       const validated = validateCsvImport(csv);
       assert(csv.startsWith('\uFEFF') && validated.valid && validated.recordCount === sourceSnapshot.transactions.length, '標準 CSV 驗證失敗。');
       assert(csv.includes('"含逗號, 換行\n與 ""引號"""'), 'CSV 未正確跳脫特殊字元。');
+      const income = sourceSnapshot.transactions.find((transaction) => transaction.type === 'income');
+      assert(income.parentCategoryId === null && income.subcategoryId === null, '測試收入應為無類別資料。');
     });
 
     await test('CSV 預覽會正確統計新增、建立帳戶與建立類別，並可原子匯入', async () => {

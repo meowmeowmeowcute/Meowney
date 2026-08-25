@@ -73,17 +73,21 @@ function validateBackupData(data) {
       if (transaction.sourceAccountId === transaction.targetAccountId || transaction.accountIds.length !== 2 || !transaction.accountIds.includes(transaction.sourceAccountId) || !transaction.accountIds.includes(transaction.targetAccountId)) fail('轉帳帳戶關聯錯誤。');
     } else {
       requireId(transaction.accountId, '交易帳戶');
-      requireId(transaction.parentCategoryId, '交易母類別');
-      requireId(transaction.subcategoryId, '交易子類別');
       requireName(transaction.accountNameSnapshot, '交易帳戶快照');
-      requireName(transaction.parentCategoryNameSnapshot, '交易母類別快照');
-      requireName(transaction.subcategoryNameSnapshot, '交易子類別快照');
       if (transaction.accountIds.length !== 1 || transaction.accountIds[0] !== transaction.accountId) fail('交易帳戶關聯錯誤。');
-      const category = subcategories.find((item) => item.id === transaction.subcategoryId);
-      if (category && category.parentCategoryId !== transaction.parentCategoryId) fail('交易子類別與母類別關聯錯誤。');
       if (accountIds.has(transaction.accountId) === false && !text(transaction.accountNameSnapshot)) fail('已刪除帳戶缺少歷史快照。');
-      if (parentIds.has(transaction.parentCategoryId) === false && !text(transaction.parentCategoryNameSnapshot)) fail('已刪除母類別缺少歷史快照。');
-      if (subcategoryIds.has(transaction.subcategoryId) === false && !text(transaction.subcategoryNameSnapshot)) fail('已刪除子類別缺少歷史快照。');
+      const categoryReferences = [transaction.parentCategoryId, transaction.parentCategoryNameSnapshot, transaction.subcategoryId, transaction.subcategoryNameSnapshot];
+      const hasCategory = transaction.type === 'expense' || categoryReferences.some((value) => value !== null && value !== undefined);
+      if (hasCategory) {
+        requireId(transaction.parentCategoryId, '交易母類別');
+        requireId(transaction.subcategoryId, '交易子類別');
+        requireName(transaction.parentCategoryNameSnapshot, '交易母類別快照');
+        requireName(transaction.subcategoryNameSnapshot, '交易子類別快照');
+        const category = subcategories.find((item) => item.id === transaction.subcategoryId);
+        if (category && category.parentCategoryId !== transaction.parentCategoryId) fail('交易子類別與母類別關聯錯誤。');
+        if (parentIds.has(transaction.parentCategoryId) === false && !text(transaction.parentCategoryNameSnapshot)) fail('已刪除母類別缺少歷史快照。');
+        if (subcategoryIds.has(transaction.subcategoryId) === false && !text(transaction.subcategoryNameSnapshot)) fail('已刪除子類別缺少歷史快照。');
+      }
     }
   }
   const settingKeys = new Set();
@@ -134,6 +138,8 @@ function csvCell(value) {
 export function exportTransactionsCsv(transactions) {
   const rows = transactions.map((transaction) => transaction.type === 'transfer'
     ? [transaction.id, transaction.type, transaction.amount, '', '', transaction.sourceAccountId, transaction.sourceAccountNameSnapshot, transaction.targetAccountId, transaction.targetAccountNameSnapshot, '', '', '', '', transaction.date, transaction.time, transaction.note]
+    : transaction.type === 'income' && !transaction.parentCategoryId && !transaction.subcategoryId
+      ? [transaction.id, transaction.type, transaction.amount, transaction.accountId, transaction.accountNameSnapshot, '', '', '', '', '', '', '', '', transaction.date, transaction.time, transaction.note]
     : [transaction.id, transaction.type, transaction.amount, transaction.accountId, transaction.accountNameSnapshot, '', '', '', '', transaction.parentCategoryId, transaction.parentCategoryNameSnapshot, transaction.subcategoryId, transaction.subcategoryNameSnapshot, transaction.date, transaction.time, transaction.note]);
   return `\uFEFF${[CSV_COLUMNS, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n')}\r\n`;
 }
@@ -172,6 +178,7 @@ export function parseCsv(fileText) {
 
 const csvText = (value) => String(value ?? '').trim();
 const emptyCsvReferences = (record, keys) => keys.every((key) => !record[key]);
+const hasCsvCategoryReferences = (record) => !emptyCsvReferences(record, ['parentCategoryId', 'parentCategoryName', 'subcategoryId', 'subcategoryName']);
 
 function parseCsvRecords(fileText) {
   const parsed = parseCsv(fileText);
@@ -206,8 +213,13 @@ function parseCsvRecords(fileText) {
       if (!record.sourceAccountName || !record.targetAccountName || record.sourceAccountName === record.targetAccountName || !emptyCsvReferences(record, ['accountId', 'accountName', 'parentCategoryId', 'parentCategoryName', 'subcategoryId', 'subcategoryName'])) {
         fail(`CSV 第 ${line} 列的轉帳帳戶或關聯欄位錯誤。`);
       }
-    } else if (!record.accountName || !record.parentCategoryName || !record.subcategoryName || !emptyCsvReferences(record, ['sourceAccountId', 'sourceAccountName', 'targetAccountId', 'targetAccountName'])) {
-      fail(`CSV 第 ${line} 列的一般交易關聯欄位錯誤。`);
+    } else {
+      if (!record.accountName || !emptyCsvReferences(record, ['sourceAccountId', 'sourceAccountName', 'targetAccountId', 'targetAccountName'])) {
+        fail(`CSV 第 ${line} 列的一般交易關聯欄位錯誤。`);
+      }
+      if (record.type === 'expense' || hasCsvCategoryReferences(record)) {
+        if (!record.parentCategoryName || !record.subcategoryName) fail(`CSV 第 ${line} 列的母子類別關聯欄位錯誤。`);
+      }
     }
     return record;
   });
@@ -218,7 +230,7 @@ function csvPreview(records) {
     type: record.type,
     amount: record.amount,
     date: record.date,
-    description: record.type === 'transfer' ? `${record.sourceAccountName} → ${record.targetAccountName}` : `${record.parentCategoryName}／${record.subcategoryName}`,
+    description: record.type === 'transfer' ? `${record.sourceAccountName} → ${record.targetAccountName}` : record.type === 'income' && !hasCsvCategoryReferences(record) ? '收入' : `${record.parentCategoryName}／${record.subcategoryName}`,
   }));
 }
 
@@ -239,6 +251,12 @@ function csvRecordMatchesTransaction(record, transaction) {
       && record.targetAccountName === transaction.targetAccountNameSnapshot
       && (!record.sourceAccountId || record.sourceAccountId === transaction.sourceAccountId)
       && (!record.targetAccountId || record.targetAccountId === transaction.targetAccountId);
+  }
+  if (record.type === 'income' && !hasCsvCategoryReferences(record)) {
+    return record.accountName === transaction.accountNameSnapshot
+      && (!record.accountId || record.accountId === transaction.accountId)
+      && !transaction.parentCategoryId
+      && !transaction.subcategoryId;
   }
   return record.accountName === transaction.accountNameSnapshot
     && record.parentCategoryName === transaction.parentCategoryNameSnapshot
@@ -348,6 +366,13 @@ function planFromRecords(records, snapshot) {
         });
       } else {
         const account = resolveAccount(record.accountId, record.accountName);
+        if (record.type === 'income' && !hasCsvCategoryReferences(record)) {
+          transactionsToCreate.push({
+            id: record.id, type: record.type, amount: record.amount, date: record.date, time: record.time, note: record.note,
+            accountId: account.id, accountNameSnapshot: record.accountName,
+          });
+          continue;
+        }
         const parent = resolveParent(record.parentCategoryId, record.parentCategoryName);
         const category = resolveSubcategory(record.subcategoryId, parent, record.subcategoryName);
         transactionsToCreate.push({

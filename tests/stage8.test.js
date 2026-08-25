@@ -29,6 +29,13 @@ export async function runStage8Tests() {
     assert(app.includes('state.repository.importCsvPlan(result.plan)'), 'CSV 匯入未使用原子資料庫寫入。');
     assert(html.includes('id="apply-csv-import"') && html.includes('確認匯入 CSV'), 'CSV 匯入確認入口不存在。');
   });
+  await test('收入不顯示或驗證類別，且金額在記帳面板捲動時保持可見', async () => {
+    const [app, css] = await Promise.all([read('app.js'), read('styles.css')]);
+    assert(app.includes("$('#category-section').hidden = form.type !== 'expense';"), '收入的類別選擇區未正確隱藏。');
+    assert(app.includes("if (form.type === 'expense' && !form.categoryId)"), '收入仍被要求選擇子類別。');
+    assert(app.includes("return form.type === 'expense' ? { ...input, parentCategoryId: form.parentId, subcategoryId: form.categoryId } : input;"), '收入表單仍送出類別關聯。');
+    assert(/\.amount-section\s*\{[^}]*position:\s*sticky/.test(css), '金額區未固定在 Bottom Sheet 的可視範圍。');
+  });
   await test('交付文件、離線資源與標準測試入口均已存在', async () => {
     for (const file of ['README.md', 'manifest.webmanifest', 'service-worker.js', 'backup-format.js', 'tests/run-node-tests.mjs']) {
       await access(new URL(file, root), constants.R_OK);

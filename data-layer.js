@@ -185,25 +185,35 @@ function transactionBase(input, type, existing = null) {
 
 async function buildNormalTransaction(stores, input, type, existing = null) {
   const accountId = input.accountId ?? existing?.accountId;
-  const parentCategoryId = input.parentCategoryId ?? existing?.parentCategoryId;
-  const subcategoryId = input.subcategoryId ?? existing?.subcategoryId;
   const account = await mustGet(stores.accounts, accountId, '帳戶');
-  const parentCategory = await mustGet(stores.parentCategories, parentCategoryId, '母類別');
-  const subcategory = await mustGet(stores.subcategories, subcategoryId, '子類別');
-  if (subcategory.parentCategoryId !== parentCategory.id) throw new DataValidationError('子類別不屬於所選母類別。');
-  return {
+  const parentCategoryId = input.parentCategoryId ?? existing?.parentCategoryId ?? null;
+  const subcategoryId = input.subcategoryId ?? existing?.subcategoryId ?? null;
+  const requiresCategory = type === 'expense' || parentCategoryId || subcategoryId;
+  const transaction = {
     ...transactionBase(input, type, existing),
     accountId: account.id,
     accountNameSnapshot: account.name,
     accountIds: [account.id],
-    parentCategoryId: parentCategory.id,
-    parentCategoryNameSnapshot: parentCategory.name,
-    subcategoryId: subcategory.id,
-    subcategoryNameSnapshot: subcategory.name,
+    parentCategoryId: null,
+    parentCategoryNameSnapshot: null,
+    subcategoryId: null,
+    subcategoryNameSnapshot: null,
     sourceAccountId: null,
     sourceAccountNameSnapshot: null,
     targetAccountId: null,
     targetAccountNameSnapshot: null,
+  };
+  if (!requiresCategory) return transaction;
+  if (!parentCategoryId || !subcategoryId) throw new DataValidationError('母類別與子類別必須同時存在。');
+  const parentCategory = await mustGet(stores.parentCategories, parentCategoryId, '母類別');
+  const subcategory = await mustGet(stores.subcategories, subcategoryId, '子類別');
+  if (subcategory.parentCategoryId !== parentCategory.id) throw new DataValidationError('子類別不屬於所選母類別。');
+  return {
+    ...transaction,
+    parentCategoryId: parentCategory.id,
+    parentCategoryNameSnapshot: parentCategory.name,
+    subcategoryId: subcategory.id,
+    subcategoryNameSnapshot: subcategory.name,
   };
 }
 
@@ -233,22 +243,31 @@ async function buildTransferTransaction(stores, input, existing = null) {
 
 async function buildCsvNormalTransaction(stores, input) {
   const account = await mustGet(stores.accounts, input.accountId, 'CSV 帳戶');
-  const parentCategory = await mustGet(stores.parentCategories, input.parentCategoryId, 'CSV 母類別');
-  const subcategory = await mustGet(stores.subcategories, input.subcategoryId, 'CSV 子類別');
-  if (subcategory.parentCategoryId !== parentCategory.id) throw new DataValidationError('CSV 子類別不屬於所選母類別。');
-  return {
+  const hasCategory = input.type === 'expense' || input.parentCategoryId || input.subcategoryId || input.parentCategoryNameSnapshot || input.subcategoryNameSnapshot;
+  const transaction = {
     ...transactionBase(input, input.type),
     accountId: account.id,
     accountNameSnapshot: requireText(input.accountNameSnapshot, 'CSV 帳戶名稱'),
     accountIds: [account.id],
-    parentCategoryId: parentCategory.id,
-    parentCategoryNameSnapshot: requireText(input.parentCategoryNameSnapshot, 'CSV 母類別名稱'),
-    subcategoryId: subcategory.id,
-    subcategoryNameSnapshot: requireText(input.subcategoryNameSnapshot, 'CSV 子類別名稱'),
+    parentCategoryId: null,
+    parentCategoryNameSnapshot: null,
+    subcategoryId: null,
+    subcategoryNameSnapshot: null,
     sourceAccountId: null,
     sourceAccountNameSnapshot: null,
     targetAccountId: null,
     targetAccountNameSnapshot: null,
+  };
+  if (!hasCategory) return transaction;
+  const parentCategory = await mustGet(stores.parentCategories, input.parentCategoryId, 'CSV 母類別');
+  const subcategory = await mustGet(stores.subcategories, input.subcategoryId, 'CSV 子類別');
+  if (subcategory.parentCategoryId !== parentCategory.id) throw new DataValidationError('CSV 子類別不屬於所選母類別。');
+  return {
+    ...transaction,
+    parentCategoryId: parentCategory.id,
+    parentCategoryNameSnapshot: requireText(input.parentCategoryNameSnapshot, 'CSV 母類別名稱'),
+    subcategoryId: subcategory.id,
+    subcategoryNameSnapshot: requireText(input.subcategoryNameSnapshot, 'CSV 子類別名稱'),
   };
 }
 
@@ -284,6 +303,12 @@ function skippedCsvTransactionStillMatches(record, transaction) {
       && record.targetAccountName === transaction.targetAccountNameSnapshot
       && (!record.sourceAccountId || record.sourceAccountId === transaction.sourceAccountId)
       && (!record.targetAccountId || record.targetAccountId === transaction.targetAccountId);
+  }
+  if (record.type === 'income' && !record.parentCategoryName && !record.subcategoryName && !record.parentCategoryId && !record.subcategoryId) {
+    return record.accountName === transaction.accountNameSnapshot
+      && (!record.accountId || record.accountId === transaction.accountId)
+      && !transaction.parentCategoryId
+      && !transaction.subcategoryId;
   }
   return record.accountName === transaction.accountNameSnapshot
     && record.parentCategoryName === transaction.parentCategoryNameSnapshot

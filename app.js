@@ -119,7 +119,11 @@ function renderAccounts() {
   }));
 }
 
-function transactionTitle(transaction) { return transaction.type === 'transfer' ? '帳戶轉帳' : transaction.categoryName; }
+function transactionTitle(transaction) {
+  if (transaction.type === 'transfer') return '帳戶轉帳';
+  if (transaction.type === 'income' && !transaction.categoryName) return '收入';
+  return transaction.categoryName;
+}
 function transactionIcon(transaction) { return transaction.type === 'expense' ? '↗' : transaction.type === 'income' ? '↙' : '⇄'; }
 function transactionAmountText(transaction) {
   if (transaction.type === 'expense') return `-${currency(transaction.amount)}`;
@@ -127,9 +131,9 @@ function transactionAmountText(transaction) {
   return currency(transaction.amount);
 }
 function transactionMeta(transaction) {
-  return transaction.type === 'transfer'
-    ? `${transaction.sourceAccountName} → ${transaction.targetAccountName} · ${transaction.time}`
-    : `${transaction.parentName} · ${transaction.accountName} · ${transaction.time}`;
+  if (transaction.type === 'transfer') return `${transaction.sourceAccountName} → ${transaction.targetAccountName} · ${transaction.time}`;
+  if (transaction.type === 'income' && !transaction.parentName) return `${transaction.accountName} · ${transaction.time}`;
+  return `${transaction.parentName} · ${transaction.accountName} · ${transaction.time}`;
 }
 
 function renderTransactions() {
@@ -223,7 +227,7 @@ function renderSheet() {
     button.disabled = Boolean(form.id);
   });
   $('#amount-display').textContent = currency(Number(form.amountText) || 0);
-  $('#category-section').hidden = form.type === 'transfer';
+  $('#category-section').hidden = form.type !== 'expense';
   $('#single-account-section').hidden = form.type === 'transfer';
   $('#transfer-account-section').hidden = form.type !== 'transfer';
   $('#note-input').value = form.note;
@@ -265,7 +269,7 @@ function validationError() {
     return null;
   }
   if (!form.accountId) return '請選擇帳戶。';
-  if (!form.categoryId) return '請選擇子類別。';
+  if (form.type === 'expense' && !form.categoryId) return '請選擇子類別。';
   return null;
 }
 
@@ -274,7 +278,8 @@ function transactionInputFromForm() {
   if (form.type === 'transfer') {
     return { type: form.type, amount: Number(form.amountText), sourceAccountId: form.sourceAccountId, targetAccountId: form.targetAccountId, note: form.note.trim(), date: form.date, time: form.time };
   }
-  return { type: form.type, amount: Number(form.amountText), accountId: form.accountId, parentCategoryId: form.parentId, subcategoryId: form.categoryId, note: form.note.trim(), date: form.date, time: form.time };
+  const input = { type: form.type, amount: Number(form.amountText), accountId: form.accountId, note: form.note.trim(), date: form.date, time: form.time };
+  return form.type === 'expense' ? { ...input, parentCategoryId: form.parentId, subcategoryId: form.categoryId } : input;
 }
 
 async function saveTransaction() {

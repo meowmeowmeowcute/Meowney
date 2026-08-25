@@ -18,12 +18,15 @@ export async function runStage3Tests() {
     const food = await repository.createParentCategory({ name: '吃喝' });
     const meal = await repository.createSubcategory({ parentCategoryId: food.id, name: '餐飲' });
 
-    await test('新增支出與收入後重新開啟仍存在', async () => {
+    await test('新增支出與無類別收入後重新開啟仍存在', async () => {
       await repository.createTransaction({ type: 'expense', amount: 120, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '午餐', date: '2026-08-20', time: '12:30' });
-      await repository.createTransaction({ type: 'income', amount: 300, accountId: bank.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '退款', date: '2026-08-21', time: '09:00' });
+      await repository.createTransaction({ type: 'income', amount: 300, accountId: bank.id, note: '退款', date: '2026-08-21', time: '09:00' });
       repository.close();
       repository = await MeowneyRepository.open({ databaseName });
-      assert((await repository.listTransactions()).length === 2, '重新開啟後交易未保留。');
+      const transactions = await repository.listTransactions();
+      assert(transactions.length === 2, '重新開啟後交易未保留。');
+      const income = transactions.find((transaction) => transaction.type === 'income');
+      assert(income.parentCategoryId === null && income.subcategoryId === null, '重新開啟後收入的無類別資料未保留。');
     });
 
     await test('交易按日期時間排序，且餘額與日期影響可重建', async () => {
