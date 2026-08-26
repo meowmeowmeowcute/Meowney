@@ -1,4 +1,4 @@
-const CACHE_NAME = 'meowney-app-shell-v7';
+const CACHE_NAME = 'meowney-app-shell-v8';
 const APP_SHELL = [
   './',
   './index.html',
@@ -14,7 +14,9 @@ const APP_SHELL = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE_NAME)
+    .then((cache) => cache.addAll(APP_SHELL.map((asset) => new Request(asset, { cache: 'reload' }))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
@@ -29,7 +31,13 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).then((response) => response).catch(() => caches.match('./index.html')));
+    event.respondWith(fetch(request)
+      .then(async (response) => {
+        const cache = await caches.open(CACHE_NAME);
+        await cache.put('./index.html', response.clone());
+        return response;
+      })
+      .catch(() => caches.match('./index.html')));
     return;
   }
   event.respondWith(caches.match(request).then((cached) => cached || fetch(request)));

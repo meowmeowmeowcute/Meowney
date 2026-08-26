@@ -23,6 +23,7 @@ export async function runStage6Tests() {
     for (const asset of ['./index.html', './styles.css', './app.js', './data-layer.js', './query-logic.js', './backup-format.js', './manifest.webmanifest', './icons/meowney.svg', './icons/meowney-192.png', './icons/meowney-512.png']) {
       assert(worker.includes(`'${asset}'`), `快取清單缺少 ${asset}。`);
     }
+    assert(worker.includes("new Request(asset, { cache: 'reload' })") && worker.includes("cache.put('./index.html', response.clone())"), '更新時沒有重新取得完整殼層或更新頁面快取。');
     assert(!/https?:\/\//.test(worker), 'Service Worker 不得依賴外部網路資源。');
   });
   await test('頁面宣告 Manifest 並在載入後註冊離線功能', async () => {
