@@ -33,12 +33,15 @@ function escapeHTML(value = '') {
 }
 
 function formatDate(date) {
+  const [year, month, day] = date.split('-');
+  return `${year}/${Number(month)}/${Number(day)}`;
+}
+
+function relativeDateLabel(date) {
   if (date === todayValue()) return '今天';
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  if (date === localDateValue(yesterday)) return '昨天';
-  const [year, month, day] = date.split('-');
-  return `${year}/${Number(month)}/${Number(day)}`;
+  return date === localDateValue(yesterday) ? '昨天' : '';
 }
 
 function toUiTransaction(transaction) {
@@ -123,9 +126,17 @@ function renderAccounts() {
 }
 
 function transactionTitle(transaction) {
+  if (transaction.isReimbursement === true) return '報銷';
   if (transaction.type === 'transfer') return '帳戶轉帳';
+  if (usesNoteAsPrimaryTitle(transaction)) return transaction.note;
   if (transaction.type === 'income' && !transaction.categoryName) return '收入';
   return transaction.categoryName || transaction.parentName;
+}
+function usesNoteAsPrimaryTitle(transaction) {
+  return Boolean(transaction.note) && (
+    (transaction.type === 'income' && transaction.isReimbursement !== true)
+    || (transaction.type === 'expense' && transaction.isDirectParentExpense === true && transaction.parentName === DIRECT_EXPENSE_PARENT_CATEGORY_NAME)
+  );
 }
 function transactionIcon(transaction) { return transaction.type === 'expense' ? '↗' : transaction.type === 'income' ? '↙' : '⇄'; }
 function transactionAmountText(transaction) {
@@ -140,7 +151,7 @@ function transactionMeta(transaction) {
 }
 
 function transactionNoteMarkup(transaction) {
-  return transaction.note ? `<small class="transaction-note">${escapeHTML(transaction.note)}</small>` : '';
+  return transaction.note && !usesNoteAsPrimaryTitle(transaction) ? `<small class="transaction-note">${escapeHTML(transaction.note)}</small>` : '';
 }
 
 function renderTransactions() {
@@ -159,11 +170,12 @@ function renderTransactions() {
   });
   $('#transaction-list').innerHTML = [...groups.entries()].map(([date, records]) => {
     const net = records.reduce((total, transaction) => total + getTransactionNet(transaction), 0);
-    return `<section class="date-group" aria-label="${formatDate(date)} 交易">
-      <header class="date-group__header"><h3>${formatDate(date)}</h3><strong class="${net > 0 ? 'positive' : net < 0 ? 'negative' : ''}">${net === 0 ? currency(0) : signedCurrency(net)}</strong></header>
+    const relativeLabel = relativeDateLabel(date);
+    return `<section class="date-group" aria-label="${formatDate(date)}${relativeLabel ? `，${relativeLabel}` : ''}交易">
+      <header class="date-group__header"><h3>${formatDate(date)}${relativeLabel ? `<small>${relativeLabel}</small>` : ''}</h3><strong class="${net > 0 ? 'positive' : net < 0 ? 'negative' : ''}">${net === 0 ? currency(0) : signedCurrency(net)}</strong></header>
       ${records.map((transaction) => `<button class="transaction-row" type="button" data-edit-id="${transaction.id}" aria-label="編輯 ${escapeHTML(transactionTitle(transaction))} ${transactionAmountText(transaction)}${transaction.note ? `，備註 ${escapeHTML(transaction.note)}` : ''}">
         <span class="transaction-icon" aria-hidden="true">${transactionIcon(transaction)}</span>
-        <span class="transaction-details"><b>${escapeHTML(transactionTitle(transaction))}</b><span>${escapeHTML(transactionMeta(transaction))}</span>${transactionNoteMarkup(transaction)}</span>
+        <span class="transaction-details"><b class="${usesNoteAsPrimaryTitle(transaction) ? 'transaction-title--note' : ''}">${escapeHTML(transactionTitle(transaction))}</b><span>${escapeHTML(transactionMeta(transaction))}</span>${transactionNoteMarkup(transaction)}</span>
         <strong class="transaction-amount ${transaction.type}">${transactionAmountText(transaction)}</strong>
       </button>`).join('')}
     </section>`;
@@ -188,11 +200,28 @@ function renderSettings() {
 }
 
 function createBlankForm() {
-  return { id: null, type: 'expense', amountText: '', accountId: null, parentId: null, categoryId: null, sourceAccountId: null, targetAccountId: null, note: '', date: todayValue(), time: timeValue(), dateTimeExpanded: false };
+  return { id: null, type: 'expense', amountText: '', accountId: null, parentId: null, categoryId: null, sourceAccountId: null, targetAccountId: null, note: '', reimbursementEnabled: false, reimbursementNote: '', isReimbursement: false, date: todayValue(), time: timeValue(), dateTimeExpanded: false };
 }
 
 function formFromTransaction(transaction) {
-  return { id: transaction.id, type: transaction.type, amountText: String(transaction.amount), accountId: transaction.accountId || null, parentId: transaction.parentId || null, categoryId: transaction.categoryId || null, sourceAccountId: transaction.sourceAccountId || null, targetAccountId: transaction.targetAccountId || null, note: transaction.note || '', date: transaction.date, time: transaction.time, dateTimeExpanded: false };
+  const reimbursement = transaction.reimbursementTransactionId ? state.transactions.find((item) => item.id === transaction.reimbursementTransactionId) : null;
+  return {
+    id: transaction.id,
+    type: transaction.type,
+    amountText: String(transaction.amount),
+    accountId: transaction.accountId || null,
+    parentId: transaction.parentId || null,
+    categoryId: transaction.categoryId || null,
+    sourceAccountId: transaction.sourceAccountId || null,
+    targetAccountId: transaction.targetAccountId || null,
+    note: transaction.note || '',
+    reimbursementEnabled: Boolean(reimbursement),
+    reimbursementNote: reimbursement?.note || '',
+    isReimbursement: transaction.isReimbursement === true,
+    date: transaction.date,
+    time: transaction.time,
+    dateTimeExpanded: false,
+  };
 }
 
 function selectedParent() { return state.categories.find((parent) => parent.id === state.form?.parentId); }
@@ -229,19 +258,30 @@ function closeSheet() {
 function renderSheet() {
   const form = state.form;
   if (!form) return;
+  const reimbursementReadOnly = form.isReimbursement === true;
   $$('.type-switch__item').forEach((button) => {
     button.classList.toggle('type-switch__item--active', button.dataset.type === form.type);
     button.disabled = Boolean(form.id);
   });
   $('#amount-display').textContent = currency(Number(form.amountText) || 0);
   $('#category-section').hidden = form.type !== 'expense';
-  $('#single-account-section').hidden = form.type === 'transfer';
+  $('#single-account-section').hidden = form.type === 'transfer' || reimbursementReadOnly;
   $('#transfer-account-section').hidden = form.type !== 'transfer';
+  $('#reimbursement-section').hidden = form.type !== 'expense' || reimbursementReadOnly;
+  $('#reimbursement-linked-info').hidden = !reimbursementReadOnly;
+  $('#reimbursement-toggle').setAttribute('aria-pressed', String(form.reimbursementEnabled));
+  $('#reimbursement-toggle').classList.toggle('reimbursement-toggle--active', form.reimbursementEnabled);
+  $('#reimbursement-toggle-status').textContent = form.reimbursementEnabled ? '會新增一筆收入' : '不產生報銷收入';
+  $('#reimbursement-note-field').hidden = !form.reimbursementEnabled || form.type !== 'expense' || reimbursementReadOnly;
+  $('#reimbursement-note-input').value = form.reimbursementNote;
+  $('#note-field-label').textContent = reimbursementReadOnly ? '報銷備註（選填）' : '備註（選填）';
   $('#note-input').value = form.note;
   $('#date-input').value = form.date;
   $('#time-input').value = form.time;
-  $('#date-time-fields').hidden = !form.dateTimeExpanded;
+  $('#toggle-date-time').hidden = reimbursementReadOnly;
+  $('#date-time-fields').hidden = reimbursementReadOnly || !form.dateTimeExpanded;
   $('#date-time-summary').textContent = `${form.date.replaceAll('-', '/')} ${form.time}`;
+  $$('.number-pad button').forEach((button) => { button.disabled = reimbursementReadOnly; });
   $('#parent-options').innerHTML = state.categories.map((parent) => `<button type="button" class="parent-tab ${parent.id === form.parentId ? 'parent-tab--active' : ''}" data-parent-id="${parent.id}" aria-pressed="${parent.id === form.parentId}">${escapeHTML(parent.name)}</button>`).join('');
   const parent = selectedParent();
   $('#category-guidance').textContent = parent?.allowsDirectExpense ? '「其他」不需要子類別' : '先選母類別，再選子類別';
@@ -298,13 +338,17 @@ async function saveTransaction() {
   if (error) return showFormError(error);
   try {
     const input = transactionInputFromForm();
-    if (state.editingId) await state.repository.updateTransaction(state.editingId, input);
+    const createdWithReimbursement = !state.editingId && state.form.type === 'expense' && state.form.reimbursementEnabled;
+    if (state.editingId && state.form.isReimbursement) await state.repository.updateReimbursementNote(state.editingId, state.form.note.trim());
+    else if (state.editingId && state.form.type === 'expense') await state.repository.updateExpenseWithReimbursement(state.editingId, input, { enabled: state.form.reimbursementEnabled, note: state.form.reimbursementNote.trim() });
+    else if (state.editingId) await state.repository.updateTransaction(state.editingId, input);
+    else if (state.form.type === 'expense' && state.form.reimbursementEnabled) await state.repository.createExpenseWithReimbursement(input, state.form.reimbursementNote.trim());
     else await state.repository.createTransaction(input);
     const edited = Boolean(state.editingId);
     await loadData();
     closeSheet();
     render();
-    showToast(edited ? '已更新交易。' : '已新增交易。');
+    showToast(edited ? '已更新交易。' : createdWithReimbursement ? '已新增支出與報銷。' : '已新增交易。');
   } catch (saveError) {
     showFormError(saveError.message || '儲存交易時發生問題，請重試。');
   }
@@ -614,6 +658,12 @@ function initialiseEvents() {
   $$('.type-switch__item').forEach((button) => button.addEventListener('click', () => { if (!state.form?.id) { state.form.type = button.dataset.type; $('#form-error').hidden = true; renderSheet(); } }));
   $$('.number-pad button').forEach((button) => button.addEventListener('click', () => appendAmount(button.dataset.key)));
   $('#note-input').addEventListener('input', (event) => { state.form.note = event.target.value; });
+  $('#reimbursement-toggle').addEventListener('click', () => {
+    if (!state.form || state.form.type !== 'expense' || state.form.isReimbursement) return;
+    state.form.reimbursementEnabled = !state.form.reimbursementEnabled;
+    renderSheet();
+  });
+  $('#reimbursement-note-input').addEventListener('input', (event) => { state.form.reimbursementNote = event.target.value; });
   $('#date-input').addEventListener('input', (event) => { state.form.date = event.target.value; $('#date-time-summary').textContent = `${state.form.date.replaceAll('-', '/')} ${state.form.time}`; });
   $('#time-input').addEventListener('input', (event) => { state.form.time = event.target.value; $('#date-time-summary').textContent = `${state.form.date.replaceAll('-', '/')} ${state.form.time}`; });
   $('#toggle-date-time').addEventListener('click', () => { state.form.dateTimeExpanded = !state.form.dateTimeExpanded; $('#date-time-fields').hidden = !state.form.dateTimeExpanded; });

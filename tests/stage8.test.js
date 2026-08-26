@@ -38,6 +38,13 @@ export async function runStage8Tests() {
     assert(app.includes("return form.type === 'expense' ? { ...input, parentCategoryId: form.parentId, subcategoryId: form.categoryId } : input;"), '收入表單仍送出類別關聯。');
     assert(/\.amount-section\s*\{[^}]*position:\s*sticky/.test(css) && /\.transaction-note\s*\{[^}]*white-space:\s*pre-wrap/.test(css), '金額區或完整備註顯示樣式缺失。');
   });
+  await test('報銷、備註優先與日期層級符合交易介面規則', async () => {
+    const [app, html, css] = await Promise.all([read('app.js'), read('index.html'), read('styles.css')]);
+    assert(app.includes('createExpenseWithReimbursement') && app.includes('updateExpenseWithReimbursement') && app.includes("transaction.isReimbursement === true) return '報銷'"), '報銷新增或顯示流程缺失。');
+    assert(app.includes('usesNoteAsPrimaryTitle(transaction)') && app.includes('relativeDateLabel(date)'), '其他支出／收入備註優先或日期標示缺失。');
+    assert(html.includes('id="reimbursement-toggle"') && html.includes('id="reimbursement-note-input"'), '報銷操作或備註欄位不存在。');
+    assert(/\.transaction-row\s*\{[^}]*min-height:\s*74px/.test(css) && css.includes('.transaction-title--note') && css.includes('.date-group__header h3 small'), '交易列密度、備註或日期視覺階級未更新。');
+  });
   await test('交付文件、離線資源與標準測試入口均已存在', async () => {
     for (const file of ['README.md', 'manifest.webmanifest', 'service-worker.js', 'backup-format.js', 'tests/run-node-tests.mjs']) {
       await access(new URL(file, root), constants.R_OK);

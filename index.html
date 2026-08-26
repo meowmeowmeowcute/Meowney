@@ -217,7 +217,22 @@
           <div id="target-account-options" class="chip-row"></div>
         </section>
 
-        <label class="note-field">備註（選填）
+        <section id="reimbursement-section" class="entry-section reimbursement-section" aria-labelledby="reimbursement-label" hidden>
+          <div class="field-label">
+            <h3 id="reimbursement-label">報銷</h3>
+            <span>同帳戶、同金額入帳</span>
+          </div>
+          <button id="reimbursement-toggle" class="reimbursement-toggle" type="button" aria-pressed="false">
+            <span><b>新增報銷</b><small id="reimbursement-toggle-status">不產生報銷收入</small></span><i aria-hidden="true">＋</i>
+          </button>
+          <label id="reimbursement-note-field" class="note-field reimbursement-note-field" hidden>報銷備註（選填）
+            <textarea id="reimbursement-note-input" rows="2" placeholder="例如：已送件、預計入帳日"></textarea>
+          </label>
+        </section>
+
+        <p id="reimbursement-linked-info" class="reimbursement-linked-info" hidden>此筆報銷與原支出連動；可在這裡修改報銷備註。</p>
+
+        <label class="note-field"><span id="note-field-label">備註（選填）</span>
           <textarea id="note-input" rows="2" placeholder="例如：午餐、薪水入帳"></textarea>
         </label>
 

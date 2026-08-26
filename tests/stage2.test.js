@@ -66,6 +66,24 @@ export async function runStage2Tests() {
       assert(await repository.getAccountBalance(cash.id) === 615, '其他類別支出沒有正確影響帳戶餘額。');
     });
 
+    await test('報銷會以原子方式新增連動收入，且可各自處理備註與刪除', async () => {
+      const beforeCount = (await repository.listTransactions()).length;
+      const created = await repository.createExpenseWithReimbursement({ type: 'expense', amount: 80, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '客戶午餐', date: '2026-08-23', time: '12:30' }, '已送公司請款');
+      assert(created.expense.reimbursementTransactionId === created.reimbursement.id && created.reimbursement.isReimbursement === true && created.reimbursement.reimbursementExpenseId === created.expense.id, '報銷交易沒有建立雙向連動。');
+      assert(created.reimbursement.type === 'income' && created.reimbursement.amount === 80 && created.reimbursement.note === '已送公司請款', '報銷沒有以同帳戶、同金額收入建立。');
+      assert((await repository.listTransactions()).length === beforeCount + 2 && await repository.getAccountBalance(cash.id) === 615, '報銷新增後交易數或帳戶淨額錯誤。');
+      await repository.updateExpenseWithReimbursement(created.expense.id, { amount: 95, accountId: bank.id, date: '2026-08-24', time: '09:30' }, { enabled: true, note: '等待入帳' });
+      const updated = await repository.listTransactions();
+      const updatedExpense = updated.find((transaction) => transaction.id === created.expense.id);
+      const updatedReimbursement = updated.find((transaction) => transaction.id === created.reimbursement.id);
+      assert(updatedExpense.amount === 95 && updatedReimbursement.amount === 95 && updatedReimbursement.accountId === bank.id && updatedReimbursement.note === '等待入帳', '修改原支出沒有同步更新報銷。');
+      await repository.updateReimbursementNote(created.reimbursement.id, '已核銷');
+      assert((await repository.listTransactions()).find((transaction) => transaction.id === created.reimbursement.id).note === '已核銷', '報銷備註無法單獨修改。');
+      await repository.deleteTransaction(created.expense.id);
+      const remaining = await repository.listTransactions();
+      assert(!remaining.some((transaction) => transaction.id === created.expense.id || transaction.id === created.reimbursement.id), '刪除原支出沒有一併刪除連動報銷。');
+    });
+
     await test('刪除帳戶與子類別後，歷史交易保留名稱快照', async () => {
       const transaction = (await repository.listTransactions()).find((item) => item.subcategoryId === meal.id);
       await repository.deleteAccount(cash.id);
