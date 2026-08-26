@@ -556,11 +556,11 @@ export class MeowneyRepository {
     });
   }
 
-  async createExpenseWithReimbursement(input, reimbursementNote = '') {
+  async createExpenseWithReimbursement(input, reimbursementNote) {
     if (requireTransactionType(input.type) !== 'expense') throw new DataValidationError('只有支出可以新增報銷。');
     return this.write([STORE.accounts, STORE.parentCategories, STORE.subcategories, STORE.transactions], async (stores) => {
       const expense = await buildNormalTransaction(stores, input, 'expense');
-      const reimbursement = buildReimbursementTransaction(expense, reimbursementNote);
+      const reimbursement = buildReimbursementTransaction(expense, reimbursementNote === undefined ? expense.note : reimbursementNote);
       const linkedExpense = { ...expense, reimbursementTransactionId: reimbursement.id };
       await requestAsPromise(stores.transactions.add(linkedExpense));
       await requestAsPromise(stores.transactions.add(reimbursement));
@@ -583,7 +583,7 @@ export class MeowneyRepository {
     });
   }
 
-  async updateExpenseWithReimbursement(id, input, { enabled = false, note = '' } = {}) {
+  async updateExpenseWithReimbursement(id, input, { enabled = false, note } = {}) {
     return this.write([STORE.accounts, STORE.parentCategories, STORE.subcategories, STORE.transactions], async (stores) => {
       const existing = await mustGet(stores.transactions, id, '支出');
       if (existing.type !== 'expense' || existing.isReimbursement === true) throw new DataValidationError('只有一般支出可以設定報銷。');
@@ -599,7 +599,7 @@ export class MeowneyRepository {
         if (existingReimbursement) await requestAsPromise(stores.transactions.delete(existingReimbursement.id));
         return { expense: { ...expense, reimbursementTransactionId: null }, reimbursement: null };
       }
-      const reimbursement = buildReimbursementTransaction(expense, note, existingReimbursement);
+      const reimbursement = buildReimbursementTransaction(expense, note === undefined ? existingReimbursement?.note ?? expense.note : note, existingReimbursement);
       const linkedExpense = { ...expense, reimbursementTransactionId: reimbursement.id };
       await requestAsPromise(stores.transactions.put(linkedExpense));
       await requestAsPromise(stores.transactions.put(reimbursement));

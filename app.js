@@ -126,15 +126,15 @@ function renderAccounts() {
 }
 
 function transactionTitle(transaction) {
-  if (transaction.isReimbursement === true) return '報銷';
   if (transaction.type === 'transfer') return '帳戶轉帳';
   if (usesNoteAsPrimaryTitle(transaction)) return transaction.note;
+  if (transaction.isReimbursement === true) return '報銷';
   if (transaction.type === 'income' && !transaction.categoryName) return '收入';
   return transaction.categoryName || transaction.parentName;
 }
 function usesNoteAsPrimaryTitle(transaction) {
   return Boolean(transaction.note) && (
-    (transaction.type === 'income' && transaction.isReimbursement !== true)
+    transaction.type === 'income'
     || (transaction.type === 'expense' && transaction.isDirectParentExpense === true && transaction.parentName === DIRECT_EXPENSE_PARENT_CATEGORY_NAME)
   );
 }
@@ -200,7 +200,7 @@ function renderSettings() {
 }
 
 function createBlankForm() {
-  return { id: null, type: 'expense', amountText: '', accountId: null, parentId: null, categoryId: null, sourceAccountId: null, targetAccountId: null, note: '', reimbursementEnabled: false, reimbursementNote: '', isReimbursement: false, date: todayValue(), time: timeValue(), dateTimeExpanded: false };
+  return { id: null, type: 'expense', amountText: '', accountId: null, parentId: null, categoryId: null, sourceAccountId: null, targetAccountId: null, note: '', reimbursementEnabled: false, reimbursementNote: '', reimbursementNoteTouched: false, isReimbursement: false, date: todayValue(), time: timeValue(), dateTimeExpanded: false };
 }
 
 function formFromTransaction(transaction) {
@@ -217,6 +217,7 @@ function formFromTransaction(transaction) {
     note: transaction.note || '',
     reimbursementEnabled: Boolean(reimbursement),
     reimbursementNote: reimbursement?.note || '',
+    reimbursementNoteTouched: Boolean(reimbursement),
     isReimbursement: transaction.isReimbursement === true,
     date: transaction.date,
     time: transaction.time,
@@ -657,13 +658,21 @@ function initialiseEvents() {
   $('#sheet-overlay').addEventListener('click', closeSheet);
   $$('.type-switch__item').forEach((button) => button.addEventListener('click', () => { if (!state.form?.id) { state.form.type = button.dataset.type; $('#form-error').hidden = true; renderSheet(); } }));
   $$('.number-pad button').forEach((button) => button.addEventListener('click', () => appendAmount(button.dataset.key)));
-  $('#note-input').addEventListener('input', (event) => { state.form.note = event.target.value; });
+  $('#note-input').addEventListener('input', (event) => {
+    state.form.note = event.target.value;
+    if (state.form.reimbursementEnabled && !state.form.reimbursementNoteTouched) {
+      state.form.reimbursementNote = state.form.note;
+      $('#reimbursement-note-input').value = state.form.reimbursementNote;
+    }
+  });
   $('#reimbursement-toggle').addEventListener('click', () => {
     if (!state.form || state.form.type !== 'expense' || state.form.isReimbursement) return;
-    state.form.reimbursementEnabled = !state.form.reimbursementEnabled;
+    const enabling = !state.form.reimbursementEnabled;
+    state.form.reimbursementEnabled = enabling;
+    if (enabling && !state.form.reimbursementNoteTouched) state.form.reimbursementNote = state.form.note;
     renderSheet();
   });
-  $('#reimbursement-note-input').addEventListener('input', (event) => { state.form.reimbursementNote = event.target.value; });
+  $('#reimbursement-note-input').addEventListener('input', (event) => { state.form.reimbursementNote = event.target.value; state.form.reimbursementNoteTouched = true; });
   $('#date-input').addEventListener('input', (event) => { state.form.date = event.target.value; $('#date-time-summary').textContent = `${state.form.date.replaceAll('-', '/')} ${state.form.time}`; });
   $('#time-input').addEventListener('input', (event) => { state.form.time = event.target.value; $('#date-time-summary').textContent = `${state.form.date.replaceAll('-', '/')} ${state.form.time}`; });
   $('#toggle-date-time').addEventListener('click', () => { state.form.dateTimeExpanded = !state.form.dateTimeExpanded; $('#date-time-fields').hidden = !state.form.dateTimeExpanded; });
