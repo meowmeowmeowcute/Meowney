@@ -1,3 +1,5 @@
+import { DIRECT_EXPENSE_PARENT_CATEGORY_NAME } from './data-layer.js';
+
 export const BACKUP_FORMAT = 'meowney-backup';
 export const BACKUP_VERSION = 1;
 export const CSV_COLUMNS = [
@@ -53,6 +55,7 @@ function validateBackupData(data) {
   for (const parent of parentCategories) {
     validateBaseRecord(parent, '母類別');
     requireName(parent.name, '母類別');
+    if (hasOwn(parent, 'allowsDirectExpense') && typeof parent.allowsDirectExpense !== 'boolean') fail('母類別直接記帳設定格式錯誤。');
   }
   for (const category of subcategories) {
     validateBaseRecord(category, '子類別');
@@ -65,6 +68,8 @@ function validateBackupData(data) {
     if (!Number.isFinite(transaction.amount) || transaction.amount <= 0) fail('交易金額必須大於 0。');
     if (!dateValue(transaction.date) || !timeValue(transaction.time) || transaction.dateTime !== `${transaction.date}T${transaction.time}`) fail('交易日期或時間格式錯誤。');
     if (typeof transaction.note !== 'string' || !Array.isArray(transaction.accountIds)) fail('交易欄位格式錯誤。');
+    if (hasOwn(transaction, 'isDirectParentExpense') && typeof transaction.isDirectParentExpense !== 'boolean') fail('交易直接記帳設定格式錯誤。');
+    if (transaction.type !== 'expense' && transaction.isDirectParentExpense === true) fail('只有支出可使用直接記帳類別。');
     if (transaction.type === 'transfer') {
       requireId(transaction.sourceAccountId, '轉帳來源帳戶');
       requireId(transaction.targetAccountId, '轉帳目的帳戶');
@@ -76,9 +81,16 @@ function validateBackupData(data) {
       requireName(transaction.accountNameSnapshot, '交易帳戶快照');
       if (transaction.accountIds.length !== 1 || transaction.accountIds[0] !== transaction.accountId) fail('交易帳戶關聯錯誤。');
       if (accountIds.has(transaction.accountId) === false && !text(transaction.accountNameSnapshot)) fail('已刪除帳戶缺少歷史快照。');
+      const directParentExpense = transaction.type === 'expense' && transaction.isDirectParentExpense === true;
       const categoryReferences = [transaction.parentCategoryId, transaction.parentCategoryNameSnapshot, transaction.subcategoryId, transaction.subcategoryNameSnapshot];
       const hasCategory = transaction.type === 'expense' || categoryReferences.some((value) => value !== null && value !== undefined);
-      if (hasCategory) {
+      if (directParentExpense) {
+        requireId(transaction.parentCategoryId, '直接記帳母類別');
+        requireName(transaction.parentCategoryNameSnapshot, '直接記帳母類別快照');
+        if (transaction.subcategoryId !== null || transaction.subcategoryNameSnapshot !== null) fail('直接記帳類別不得包含子類別。');
+        const parent = parentCategories.find((item) => item.id === transaction.parentCategoryId);
+        if (parent && parent.allowsDirectExpense !== true) fail('直接記帳母類別設定錯誤。');
+      } else if (hasCategory) {
         requireId(transaction.parentCategoryId, '交易母類別');
         requireId(transaction.subcategoryId, '交易子類別');
         requireName(transaction.parentCategoryNameSnapshot, '交易母類別快照');
@@ -179,6 +191,10 @@ export function parseCsv(fileText) {
 const csvText = (value) => String(value ?? '').trim();
 const emptyCsvReferences = (record, keys) => keys.every((key) => !record[key]);
 const hasCsvCategoryReferences = (record) => !emptyCsvReferences(record, ['parentCategoryId', 'parentCategoryName', 'subcategoryId', 'subcategoryName']);
+const isDirectExpenseCsvRecord = (record) => record.type === 'expense'
+  && record.parentCategoryName === DIRECT_EXPENSE_PARENT_CATEGORY_NAME
+  && !record.subcategoryId
+  && !record.subcategoryName;
 
 function parseCsvRecords(fileText) {
   const parsed = parseCsv(fileText);
@@ -217,7 +233,9 @@ function parseCsvRecords(fileText) {
       if (!record.accountName || !emptyCsvReferences(record, ['sourceAccountId', 'sourceAccountName', 'targetAccountId', 'targetAccountName'])) {
         fail(`CSV 第 ${line} 列的一般交易關聯欄位錯誤。`);
       }
-      if (record.type === 'expense' || hasCsvCategoryReferences(record)) {
+      if (isDirectExpenseCsvRecord(record)) {
+        if (!record.parentCategoryName || record.subcategoryId || record.subcategoryName) fail(`CSV 第 ${line} 列的其他類別關聯欄位錯誤。`);
+      } else if (record.type === 'expense' || hasCsvCategoryReferences(record)) {
         if (!record.parentCategoryName || !record.subcategoryName) fail(`CSV 第 ${line} 列的母子類別關聯欄位錯誤。`);
       }
     }
@@ -230,7 +248,7 @@ function csvPreview(records) {
     type: record.type,
     amount: record.amount,
     date: record.date,
-    description: record.type === 'transfer' ? `${record.sourceAccountName} → ${record.targetAccountName}` : record.type === 'income' && !hasCsvCategoryReferences(record) ? '收入' : `${record.parentCategoryName}／${record.subcategoryName}`,
+    description: record.type === 'transfer' ? `${record.sourceAccountName} → ${record.targetAccountName}` : record.type === 'income' && !hasCsvCategoryReferences(record) ? '收入' : isDirectExpenseCsvRecord(record) ? record.parentCategoryName : `${record.parentCategoryName}／${record.subcategoryName}`,
   }));
 }
 
@@ -256,6 +274,14 @@ function csvRecordMatchesTransaction(record, transaction) {
     return record.accountName === transaction.accountNameSnapshot
       && (!record.accountId || record.accountId === transaction.accountId)
       && !transaction.parentCategoryId
+      && !transaction.subcategoryId;
+  }
+  if (isDirectExpenseCsvRecord(record)) {
+    return record.accountName === transaction.accountNameSnapshot
+      && record.parentCategoryName === transaction.parentCategoryNameSnapshot
+      && (!record.accountId || record.accountId === transaction.accountId)
+      && (!record.parentCategoryId || record.parentCategoryId === transaction.parentCategoryId)
+      && transaction.isDirectParentExpense === true
       && !transaction.subcategoryId;
   }
   return record.accountName === transaction.accountNameSnapshot
@@ -316,7 +342,7 @@ function planFromRecords(records, snapshot) {
     const named = parentsByName.byName.get(name);
     if (named === null) fail(`母類別名稱「${name}」不唯一，無法安全匯入。`);
     if (named) return named;
-    const parent = { id: id || crypto.randomUUID(), name, planned: true };
+    const parent = { id: id || crypto.randomUUID(), name, allowsDirectExpense: name === DIRECT_EXPENSE_PARENT_CATEGORY_NAME, planned: true };
     parentsById.set(parent.id, parent);
     parentsByName.byName.set(name, parent);
     parentCategoriesToCreate.push(parent);
@@ -374,6 +400,16 @@ function planFromRecords(records, snapshot) {
           continue;
         }
         const parent = resolveParent(record.parentCategoryId, record.parentCategoryName);
+        if (isDirectExpenseCsvRecord(record)) {
+          if (parent.allowsDirectExpense !== true) fail('其他類別未設定為可直接記帳。');
+          transactionsToCreate.push({
+            id: record.id, type: record.type, amount: record.amount, date: record.date, time: record.time, note: record.note,
+            accountId: account.id, accountNameSnapshot: record.accountName,
+            parentCategoryId: parent.id, parentCategoryNameSnapshot: record.parentCategoryName,
+            isDirectParentExpense: true,
+          });
+          continue;
+        }
         const category = resolveSubcategory(record.subcategoryId, parent, record.subcategoryName);
         transactionsToCreate.push({
           id: record.id, type: record.type, amount: record.amount, date: record.date, time: record.time, note: record.note,

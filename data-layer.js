@@ -5,6 +5,7 @@
 
 export const DATABASE_NAME = 'meowney-ledger';
 export const DATABASE_VERSION = 1;
+export const DIRECT_EXPENSE_PARENT_CATEGORY_NAME = '其他';
 
 const STORE = Object.freeze({
   accounts: 'accounts',
@@ -141,9 +142,11 @@ function normaliseAccount(input, existing = null) {
 
 function normaliseParentCategory(input, existing = null) {
   const timestamp = now();
+  const name = requireText(input.name, '母類別名稱');
   return {
     id: existing?.id || input.id || createId(),
-    name: requireText(input.name, '母類別名稱'),
+    name,
+    allowsDirectExpense: name === DIRECT_EXPENSE_PARENT_CATEGORY_NAME || input.allowsDirectExpense === true || existing?.allowsDirectExpense === true,
     createdAt: existing?.createdAt || timestamp,
     updatedAt: timestamp,
   };
@@ -198,14 +201,26 @@ async function buildNormalTransaction(stores, input, type, existing = null) {
     parentCategoryNameSnapshot: null,
     subcategoryId: null,
     subcategoryNameSnapshot: null,
+    isDirectParentExpense: false,
     sourceAccountId: null,
     sourceAccountNameSnapshot: null,
     targetAccountId: null,
     targetAccountNameSnapshot: null,
   };
   if (!requiresCategory) return transaction;
-  if (!parentCategoryId || !subcategoryId) throw new DataValidationError('母類別與子類別必須同時存在。');
+  if (!parentCategoryId) throw new DataValidationError('請選擇母類別。');
   const parentCategory = await mustGet(stores.parentCategories, parentCategoryId, '母類別');
+  if (!subcategoryId) {
+    if (type === 'expense' && parentCategory.allowsDirectExpense === true) {
+      return {
+        ...transaction,
+        parentCategoryId: parentCategory.id,
+        parentCategoryNameSnapshot: parentCategory.name,
+        isDirectParentExpense: true,
+      };
+    }
+    throw new DataValidationError('母類別與子類別必須同時存在。');
+  }
   const subcategory = await mustGet(stores.subcategories, subcategoryId, '子類別');
   if (subcategory.parentCategoryId !== parentCategory.id) throw new DataValidationError('子類別不屬於所選母類別。');
   return {
@@ -214,6 +229,7 @@ async function buildNormalTransaction(stores, input, type, existing = null) {
     parentCategoryNameSnapshot: parentCategory.name,
     subcategoryId: subcategory.id,
     subcategoryNameSnapshot: subcategory.name,
+    isDirectParentExpense: false,
   };
 }
 
@@ -234,6 +250,7 @@ async function buildTransferTransaction(stores, input, existing = null) {
     parentCategoryNameSnapshot: null,
     subcategoryId: null,
     subcategoryNameSnapshot: null,
+    isDirectParentExpense: false,
     sourceAccountId: source.id,
     sourceAccountNameSnapshot: source.name,
     targetAccountId: target.id,
@@ -253,6 +270,7 @@ async function buildCsvNormalTransaction(stores, input) {
     parentCategoryNameSnapshot: null,
     subcategoryId: null,
     subcategoryNameSnapshot: null,
+    isDirectParentExpense: false,
     sourceAccountId: null,
     sourceAccountNameSnapshot: null,
     targetAccountId: null,
@@ -260,6 +278,15 @@ async function buildCsvNormalTransaction(stores, input) {
   };
   if (!hasCategory) return transaction;
   const parentCategory = await mustGet(stores.parentCategories, input.parentCategoryId, 'CSV 母類別');
+  if (input.isDirectParentExpense === true) {
+    if (input.type !== 'expense' || input.subcategoryId || parentCategory.allowsDirectExpense !== true) throw new DataValidationError('CSV 直接記帳類別錯誤。');
+    return {
+      ...transaction,
+      parentCategoryId: parentCategory.id,
+      parentCategoryNameSnapshot: requireText(input.parentCategoryNameSnapshot, 'CSV 母類別名稱'),
+      isDirectParentExpense: true,
+    };
+  }
   const subcategory = await mustGet(stores.subcategories, input.subcategoryId, 'CSV 子類別');
   if (subcategory.parentCategoryId !== parentCategory.id) throw new DataValidationError('CSV 子類別不屬於所選母類別。');
   return {
@@ -268,6 +295,7 @@ async function buildCsvNormalTransaction(stores, input) {
     parentCategoryNameSnapshot: requireText(input.parentCategoryNameSnapshot, 'CSV 母類別名稱'),
     subcategoryId: subcategory.id,
     subcategoryNameSnapshot: requireText(input.subcategoryNameSnapshot, 'CSV 子類別名稱'),
+    isDirectParentExpense: false,
   };
 }
 
@@ -284,6 +312,7 @@ async function buildCsvTransferTransaction(stores, input) {
     parentCategoryNameSnapshot: null,
     subcategoryId: null,
     subcategoryNameSnapshot: null,
+    isDirectParentExpense: false,
     sourceAccountId: source.id,
     sourceAccountNameSnapshot: requireText(input.sourceAccountNameSnapshot, 'CSV 來源帳戶名稱'),
     targetAccountId: target.id,
@@ -308,6 +337,14 @@ function skippedCsvTransactionStillMatches(record, transaction) {
     return record.accountName === transaction.accountNameSnapshot
       && (!record.accountId || record.accountId === transaction.accountId)
       && !transaction.parentCategoryId
+      && !transaction.subcategoryId;
+  }
+  if (record.type === 'expense' && record.isDirectParentExpense === true) {
+    return record.accountName === transaction.accountNameSnapshot
+      && record.parentCategoryName === transaction.parentCategoryNameSnapshot
+      && (!record.accountId || record.accountId === transaction.accountId)
+      && (!record.parentCategoryId || record.parentCategoryId === transaction.parentCategoryId)
+      && transaction.isDirectParentExpense === true
       && !transaction.subcategoryId;
   }
   return record.accountName === transaction.accountNameSnapshot
@@ -531,7 +568,7 @@ export class MeowneyRepository {
         await requestAsPromise(stores.accounts.add(account));
       }
       for (const input of plan.parentCategoriesToCreate) {
-        const parent = normaliseParentCategory({ id: input.id, name: input.name });
+        const parent = normaliseParentCategory({ id: input.id, name: input.name, allowsDirectExpense: input.allowsDirectExpense });
         await requestAsPromise(stores.parentCategories.add(parent));
       }
       for (const input of plan.subcategoriesToCreate) {

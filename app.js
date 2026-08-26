@@ -1,4 +1,4 @@
-import { MeowneyRepository } from './data-layer.js';
+import { DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js';
 import { parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js';
 import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js';
 
@@ -15,7 +15,7 @@ const state = {
   csvImportText: null,
 };
 
-const DEFAULT_PARENT_CATEGORIES = ['購物', '吃喝', '交通', '娛樂', '生活'];
+const DEFAULT_PARENT_CATEGORIES = ['購物', '吃喝', '交通', '娛樂', '生活', DIRECT_EXPENSE_PARENT_CATEGORY_NAME];
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -87,18 +87,21 @@ async function loadData() {
   const childrenByParent = new Map(snapshot.parentCategories.map((parent) => [parent.id, []]));
   snapshot.subcategories.forEach((subcategory) => childrenByParent.get(subcategory.parentCategoryId)?.push({ id: subcategory.id, name: subcategory.name }));
   state.accounts = snapshot.accounts.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
-  state.categories = snapshot.parentCategories.map((parent) => ({ id: parent.id, name: parent.name, children: childrenByParent.get(parent.id) || [] }));
+  state.categories = snapshot.parentCategories.map((parent) => ({ id: parent.id, name: parent.name, allowsDirectExpense: parent.allowsDirectExpense === true, children: childrenByParent.get(parent.id) || [] }));
   state.transactions = snapshot.transactions.map(toUiTransaction).sort(byDateTime);
   if (state.selectedAccountId && !state.accounts.some((account) => account.id === state.selectedAccountId)) state.selectedAccountId = null;
 }
 
 async function ensureInitialParentCategories() {
-  if (await state.repository.getSetting('initial-parent-categories-created')) return;
   const existing = await state.repository.listParentCategories();
   if (!existing.length) {
-    for (const name of DEFAULT_PARENT_CATEGORIES) await state.repository.createParentCategory({ name });
+    for (const name of DEFAULT_PARENT_CATEGORIES) await state.repository.createParentCategory({ name, allowsDirectExpense: name === DIRECT_EXPENSE_PARENT_CATEGORY_NAME });
+  } else {
+    const directExpenseParent = existing.find((parent) => parent.name === DIRECT_EXPENSE_PARENT_CATEGORY_NAME);
+    if (!directExpenseParent) await state.repository.createParentCategory({ name: DIRECT_EXPENSE_PARENT_CATEGORY_NAME, allowsDirectExpense: true });
+    else if (directExpenseParent.allowsDirectExpense !== true) await state.repository.updateParentCategory(directExpenseParent.id, { allowsDirectExpense: true });
   }
-  await state.repository.setSetting('initial-parent-categories-created', true);
+  if (!await state.repository.getSetting('initial-parent-categories-created')) await state.repository.setSetting('initial-parent-categories-created', true);
 }
 
 function renderAccounts() {
@@ -122,7 +125,7 @@ function renderAccounts() {
 function transactionTitle(transaction) {
   if (transaction.type === 'transfer') return '帳戶轉帳';
   if (transaction.type === 'income' && !transaction.categoryName) return '收入';
-  return transaction.categoryName;
+  return transaction.categoryName || transaction.parentName;
 }
 function transactionIcon(transaction) { return transaction.type === 'expense' ? '↗' : transaction.type === 'income' ? '↙' : '⇄'; }
 function transactionAmountText(transaction) {
@@ -134,6 +137,10 @@ function transactionMeta(transaction) {
   if (transaction.type === 'transfer') return `${transaction.sourceAccountName} → ${transaction.targetAccountName} · ${transaction.time}`;
   if (transaction.type === 'income' && !transaction.parentName) return `${transaction.accountName} · ${transaction.time}`;
   return `${transaction.parentName} · ${transaction.accountName} · ${transaction.time}`;
+}
+
+function transactionNoteMarkup(transaction) {
+  return transaction.note ? `<small class="transaction-note">${escapeHTML(transaction.note)}</small>` : '';
 }
 
 function renderTransactions() {
@@ -154,9 +161,9 @@ function renderTransactions() {
     const net = records.reduce((total, transaction) => total + getTransactionNet(transaction), 0);
     return `<section class="date-group" aria-label="${formatDate(date)} 交易">
       <header class="date-group__header"><h3>${formatDate(date)}</h3><strong class="${net > 0 ? 'positive' : net < 0 ? 'negative' : ''}">${net === 0 ? currency(0) : signedCurrency(net)}</strong></header>
-      ${records.map((transaction) => `<button class="transaction-row" type="button" data-edit-id="${transaction.id}" aria-label="編輯 ${escapeHTML(transactionTitle(transaction))} ${transactionAmountText(transaction)}">
+      ${records.map((transaction) => `<button class="transaction-row" type="button" data-edit-id="${transaction.id}" aria-label="編輯 ${escapeHTML(transactionTitle(transaction))} ${transactionAmountText(transaction)}${transaction.note ? `，備註 ${escapeHTML(transaction.note)}` : ''}">
         <span class="transaction-icon" aria-hidden="true">${transactionIcon(transaction)}</span>
-        <span class="transaction-details"><b>${escapeHTML(transactionTitle(transaction))}</b><span>${escapeHTML(transactionMeta(transaction))}</span></span>
+        <span class="transaction-details"><b>${escapeHTML(transactionTitle(transaction))}</b><span>${escapeHTML(transactionMeta(transaction))}</span>${transactionNoteMarkup(transaction)}</span>
         <strong class="transaction-amount ${transaction.type}">${transactionAmountText(transaction)}</strong>
       </button>`).join('')}
     </section>`;
@@ -237,8 +244,11 @@ function renderSheet() {
   $('#date-time-summary').textContent = `${form.date.replaceAll('-', '/')} ${form.time}`;
   $('#parent-options').innerHTML = state.categories.map((parent) => `<button type="button" class="parent-tab ${parent.id === form.parentId ? 'parent-tab--active' : ''}" data-parent-id="${parent.id}" aria-pressed="${parent.id === form.parentId}">${escapeHTML(parent.name)}</button>`).join('');
   const parent = selectedParent();
-  $('#category-options').innerHTML = parent
-    ? parent.children.map((category) => `<button type="button" class="category-tile ${category.id === form.categoryId ? 'category-tile--active' : ''}" data-category-id="${category.id}" aria-pressed="${category.id === form.categoryId}"><span>${escapeHTML(category.name)}</span></button>`).join('')
+  $('#category-guidance').textContent = parent?.allowsDirectExpense ? '「其他」不需要子類別' : '先選母類別，再選子類別';
+  $('#category-options').innerHTML = parent?.allowsDirectExpense
+    ? '<span class="category-empty">「其他」不需要子類別</span>'
+    : parent
+      ? parent.children.map((category) => `<button type="button" class="category-tile ${category.id === form.categoryId ? 'category-tile--active' : ''}" data-category-id="${category.id}" aria-pressed="${category.id === form.categoryId}"><span>${escapeHTML(category.name)}</span></button>`).join('')
     : '<span class="category-empty">請先選擇母類別</span>';
   const accountChips = (attribute, selectedId, blockedId = null) => state.accounts.map((account) => `<button type="button" class="chip ${account.id === selectedId ? 'chip--active' : ''}" ${attribute}="${account.id}" ${account.id === blockedId ? 'disabled' : ''}>${escapeHTML(account.name)}</button>`).join('');
   $('#account-options').innerHTML = accountChips('data-account-id', form.accountId);
@@ -269,7 +279,8 @@ function validationError() {
     return null;
   }
   if (!form.accountId) return '請選擇帳戶。';
-  if (form.type === 'expense' && !form.categoryId) return '請選擇子類別。';
+  if (form.type === 'expense' && !form.parentId) return '請選擇母類別。';
+  if (form.type === 'expense' && !selectedParent()?.allowsDirectExpense && !form.categoryId) return '請選擇子類別。';
   return null;
 }
 
@@ -403,7 +414,7 @@ function renderQuery() {
     $('#subcategory-query-total').textContent = currency(summary.totalExpense);
     $('#subcategory-query-count').textContent = `${summary.count} 筆`;
     $('#query-list').innerHTML = summary.transactions.length
-      ? summary.transactions.map((transaction) => `<div class="query-row"><div><b>${escapeHTML(transaction.categoryName)}</b><span>${escapeHTML(transaction.date)} · ${escapeHTML(transaction.accountName)} · ${escapeHTML(transaction.time)}</span></div><strong class="${transaction.type}">${transactionAmountText(transaction)}</strong></div>`).join('')
+      ? summary.transactions.map((transaction) => `<div class="query-row"><div><b>${escapeHTML(transaction.categoryName)}</b><span>${escapeHTML(transaction.date)} · ${escapeHTML(transaction.accountName)} · ${escapeHTML(transaction.time)}</span>${transactionNoteMarkup(transaction)}</div><strong class="${transaction.type}">${transactionAmountText(transaction)}</strong></div>`).join('')
       : '<div class="empty-state">沒有符合條件的交易。</div>';
   }
 }

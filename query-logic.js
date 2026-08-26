@@ -90,13 +90,14 @@ export function parentCategoryBreakdown(results, parentCategoryId) {
   const entries = new Map();
   for (const transaction of results) {
     if (transaction.type !== 'expense' || transaction.parentCategoryId !== parentCategoryId) continue;
-    const current = entries.get(transaction.subcategoryId) || {
-      id: transaction.subcategoryId,
-      name: transaction.subcategoryNameSnapshot || '已刪除子類別',
+    const entryId = transaction.isDirectParentExpense === true ? `direct:${transaction.parentCategoryId}` : transaction.subcategoryId;
+    const current = entries.get(entryId) || {
+      id: entryId,
+      name: transaction.isDirectParentExpense === true ? transaction.parentCategoryNameSnapshot : transaction.subcategoryNameSnapshot || '已刪除子類別',
       amount: 0,
     };
     current.amount += transaction.amount;
-    entries.set(transaction.subcategoryId, current);
+    entries.set(entryId, current);
   }
   const subcategories = [...entries.values()].sort((left, right) => right.amount - left.amount || left.name.localeCompare(right.name, 'zh-TW'));
   return { totalExpense: subcategories.reduce((total, item) => total + item.amount, 0), subcategories };

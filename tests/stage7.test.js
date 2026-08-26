@@ -31,9 +31,11 @@ export async function runStage7Tests() {
     const bank = await source.createAccount({ name: '銀行', initialBalance: 500 });
     const food = await source.createParentCategory({ name: '吃喝' });
     const meal = await source.createSubcategory({ parentCategoryId: food.id, name: '餐飲' });
+    const other = await source.createParentCategory({ name: '其他', allowsDirectExpense: true });
     await source.createTransaction({ type: 'expense', amount: 125.5, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '含逗號, 換行\n與 "引號"', date: '2026-08-24', time: '12:30' });
     await source.createTransaction({ type: 'income', amount: 300, accountId: bank.id, note: '餐費補助', date: '2026-08-25', time: '09:00' });
     await source.createTransaction({ type: 'transfer', amount: 80, sourceAccountId: bank.id, targetAccountId: cash.id, note: '轉存', date: '2026-08-25', time: '18:00' });
+    await source.createTransaction({ type: 'expense', amount: 10, accountId: cash.id, parentCategoryId: other.id, note: '零星支出', date: '2026-08-25', time: '19:00' });
     await source.setSetting('initial-parent-categories-created', true);
     const sourceSnapshot = await source.getSnapshot();
     const backup = createBackup(sourceSnapshot, '2026-08-25T12:00:00.000Z');
@@ -45,7 +47,7 @@ export async function runStage7Tests() {
       const restored = await target.getSnapshot();
       assert(JSON.stringify(restored) === JSON.stringify(sourceSnapshot), '還原後資料與來源備份不一致。');
       const balances = calculateAccountBalances(restored.accounts, restored.transactions);
-      assert(balances.get(cash.id) === 954.5 && balances.get(bank.id) === 720, '還原後帳戶餘額錯誤。');
+      assert(balances.get(cash.id) === 944.5 && balances.get(bank.id) === 720, '還原後帳戶餘額錯誤。');
       const query = runTransactionQuery(restored.transactions, { parentCategoryId: food.id }, '2026-08-25');
       assert(query.expenseTotal === 125.5 && query.incomeTotal === 0, '無類別收入不應被母類別查詢納入。');
     });
@@ -76,19 +78,22 @@ export async function runStage7Tests() {
       assert(csv.includes('"含逗號, 換行\n與 ""引號"""'), 'CSV 未正確跳脫特殊字元。');
       const income = sourceSnapshot.transactions.find((transaction) => transaction.type === 'income');
       assert(income.parentCategoryId === null && income.subcategoryId === null, '測試收入應為無類別資料。');
+      const directExpense = sourceSnapshot.transactions.find((transaction) => transaction.isDirectParentExpense === true);
+      assert(directExpense?.parentCategoryNameSnapshot === '其他' && directExpense.subcategoryId === null, '其他類別支出未正確保留在 JSON／CSV 資料中。');
     });
 
     await test('CSV 預覽會正確統計新增、建立帳戶與建立類別，並可原子匯入', async () => {
       const csv = exportTransactionsCsv(sourceSnapshot.transactions);
       const plan = planCsvImport(csv, await csvTarget.getSnapshot());
       assert(plan.valid, `CSV 匯入計畫錯誤：${plan.error}`);
-      assert(plan.summary.newTransactions === 3 && plan.summary.skippedTransactions === 0 && plan.summary.createdAccounts === 2 && plan.summary.createdParentCategories === 1 && plan.summary.createdSubcategories === 1 && plan.summary.conflictCount === 0, 'CSV 預覽統計錯誤。');
+      assert(plan.summary.newTransactions === 4 && plan.summary.skippedTransactions === 0 && plan.summary.createdAccounts === 2 && plan.summary.createdParentCategories === 2 && plan.summary.createdSubcategories === 1 && plan.summary.conflictCount === 0, 'CSV 預覽統計錯誤。');
       await csvTarget.importCsvPlan(plan.plan);
       const imported = await csvTarget.getSnapshot();
       assert(imported.accounts.length === 2 && imported.accounts.every((account) => account.initialBalance === 0), '缺少帳戶沒有依名稱以初始餘額 0 建立。');
-      assert(imported.parentCategories.length === 1 && imported.subcategories.length === 1 && imported.transactions.length === 3, 'CSV 類別或交易沒有完整匯入。');
+      assert(imported.parentCategories.length === 2 && imported.subcategories.length === 1 && imported.transactions.length === 4, 'CSV 類別或交易沒有完整匯入。');
+      assert(imported.transactions.some((transaction) => transaction.isDirectParentExpense === true && transaction.parentCategoryNameSnapshot === '其他'), 'CSV 沒有完整匯入其他類別支出。');
       const retry = planCsvImport(csv, imported);
-      assert(retry.valid && retry.summary.newTransactions === 0 && retry.summary.skippedTransactions === 3, '完全相同的既有交易沒有正確跳過。');
+      assert(retry.valid && retry.summary.newTransactions === 0 && retry.summary.skippedTransactions === 4, '完全相同的既有交易沒有正確跳過。');
     });
 
     await test('既有交易內容不同或 CSV 內重複 ID 都會衝突且不寫入', async () => {
@@ -120,11 +125,11 @@ export async function runStage7Tests() {
       const nameOnlyTargetName = `meowney-stage7-name-only-${crypto.randomUUID()}`;
       const nameOnlyTarget = await MeowneyRepository.open({ databaseName: nameOnlyTargetName });
       try {
-        const csv = exportTransactionsCsv(sourceSnapshot.transactions).replaceAll(cash.id, '').replaceAll(food.id, '').replaceAll(meal.id, '');
+        const csv = exportTransactionsCsv(sourceSnapshot.transactions).replaceAll(cash.id, '').replaceAll(food.id, '').replaceAll(meal.id, '').replaceAll(other.id, '');
         const plan = planCsvImport(csv, await nameOnlyTarget.getSnapshot());
-        assert(plan.valid && plan.summary.createdAccounts === 2 && plan.summary.createdParentCategories === 1 && plan.summary.createdSubcategories === 1, '名稱式帳戶或類別建立計畫錯誤。');
+        assert(plan.valid && plan.summary.createdAccounts === 2 && plan.summary.createdParentCategories === 2 && plan.summary.createdSubcategories === 1, '名稱式帳戶或類別建立計畫錯誤。');
         await nameOnlyTarget.importCsvPlan(plan.plan);
-        assert((await nameOnlyTarget.getSnapshot()).transactions.length === 3, '名稱式 CSV 匯入失敗。');
+        assert((await nameOnlyTarget.getSnapshot()).transactions.length === 4, '名稱式 CSV 匯入失敗。');
       } finally {
         nameOnlyTarget.close();
         await deleteDatabase(nameOnlyTargetName);

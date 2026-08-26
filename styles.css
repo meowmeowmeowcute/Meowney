@@ -64,6 +64,7 @@ h3 em { color: var(--muted); font-size: 12px; font-style: normal; font-weight: 5
 .transaction-details b, .transaction-details span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .transaction-details b { font-size: 17px; letter-spacing: -.02em; }
 .transaction-details span { margin-top: 5px; color: var(--muted); font-size: 12px; }
+.transaction-note { display: block; margin-top: 5px; color: #c7d0cc; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-wrap; }
 .transaction-amount { align-self: center; font-size: 18px; font-weight: 800; letter-spacing: -.02em; white-space: nowrap; }
 .transaction-amount.expense { color: var(--red); }
 .transaction-amount.income { color: var(--green); }
@@ -99,6 +100,7 @@ textarea { padding: 11px; resize: vertical; }
 .query-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
 .query-row:last-child { border-bottom: 0; }
 .query-row span { color: var(--muted); }
+.query-row .transaction-note { margin-top: 4px; }
 .query-row .expense { color: var(--red); }
 .query-row .income { color: var(--green); }
 .query-guidance, .query-empty { margin: 4px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }

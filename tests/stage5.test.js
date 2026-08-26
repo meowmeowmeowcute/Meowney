@@ -17,6 +17,7 @@ export async function runStage5Tests() {
     const bank = await repository.createAccount({ name: '銀行', initialBalance: 500 });
     const food = await repository.createParentCategory({ name: '吃喝' });
     const shopping = await repository.createParentCategory({ name: '購物' });
+    const other = await repository.createParentCategory({ name: '其他', allowsDirectExpense: true });
     const meal = await repository.createSubcategory({ parentCategoryId: food.id, name: '餐飲' });
     const coffee = await repository.createSubcategory({ parentCategoryId: food.id, name: '咖啡' });
     const daily = await repository.createSubcategory({ parentCategoryId: shopping.id, name: '日用品' });
@@ -70,6 +71,12 @@ export async function runStage5Tests() {
       const query = runTransactionQuery(transactions, {}, now);
       assert(query.expenseTotal === 270 && query.incomeTotal === 300 && query.count === 5, '收支總額或筆數錯誤。');
       assert(!query.results.some((transaction) => transaction.type === 'transfer'), '轉帳被納入查詢結果。');
+    });
+
+    await test('其他類別的直接支出會歸入母類別合計且不顯示已刪除子類別', async () => {
+      const directExpense = await repository.createTransaction({ type: 'expense', amount: 20, accountId: bank.id, parentCategoryId: other.id, note: '臨時支出', date: '2026-08-24', time: '21:00' });
+      const breakdown = parentCategoryBreakdown([directExpense], other.id);
+      assert(breakdown.totalExpense === 20 && breakdown.subcategories.length === 1 && breakdown.subcategories[0].name === '其他', '其他類別的直接支出統計顯示錯誤。');
     });
 
     await test('已刪除帳戶與子類別的歷史交易仍可依保留 ID 查詢', async () => {

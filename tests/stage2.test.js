@@ -40,6 +40,7 @@ export async function runStage2Tests() {
     const bank = await repository.createAccount({ name: '銀行', initialBalance: 200 });
     const food = await repository.createParentCategory({ name: '吃喝' });
     const meal = await repository.createSubcategory({ parentCategoryId: food.id, name: '餐飲' });
+    const other = await repository.createParentCategory({ name: '其他' });
 
     await test('新資料庫可建立並在重開後保留資料', async () => {
       repository.close();
@@ -58,8 +59,15 @@ export async function runStage2Tests() {
       assert([...balances.values()].reduce((total, amount) => total + amount, 0) === 1140, '轉帳改變了所有帳戶合計。');
     });
 
+    await test('其他類別可直接新增支出，其他支出仍必須選擇子類別', async () => {
+      await rejects(() => repository.createTransaction({ type: 'expense', amount: 10, accountId: bank.id, parentCategoryId: food.id, date: '2026-08-23', time: '11:30' }), DataValidationError);
+      const directExpense = await repository.createTransaction({ type: 'expense', amount: 35, accountId: cash.id, parentCategoryId: other.id, note: '零星支出', date: '2026-08-23', time: '12:00' });
+      assert(other.allowsDirectExpense === true && directExpense.isDirectParentExpense === true && directExpense.parentCategoryNameSnapshot === '其他' && directExpense.subcategoryId === null, '其他類別沒有正確建立免子類別支出。');
+      assert(await repository.getAccountBalance(cash.id) === 615, '其他類別支出沒有正確影響帳戶餘額。');
+    });
+
     await test('刪除帳戶與子類別後，歷史交易保留名稱快照', async () => {
-      const transaction = (await repository.listTransactions()).find((item) => item.type === 'expense');
+      const transaction = (await repository.listTransactions()).find((item) => item.subcategoryId === meal.id);
       await repository.deleteAccount(cash.id);
       await repository.deleteSubcategory(meal.id);
       const saved = (await repository.listTransactions()).find((item) => item.id === transaction.id);
