@@ -132,6 +132,12 @@ function transactionTitle(transaction) {
   if (transaction.type === 'income' && !transaction.categoryName) return '收入';
   return transaction.categoryName || transaction.parentName;
 }
+function transactionTitleMarkup(transaction) {
+  const reimbursementLabel = transaction.isReimbursement === true && transaction.note
+    ? '<small class="transaction-kind">報銷</small>'
+    : '';
+  return `<b class="${usesNoteAsPrimaryTitle(transaction) ? 'transaction-title--note' : ''}">${escapeHTML(transactionTitle(transaction))}${reimbursementLabel}</b>`;
+}
 function usesNoteAsPrimaryTitle(transaction) {
   return Boolean(transaction.note) && (
     transaction.type === 'income'
@@ -175,7 +181,7 @@ function renderTransactions() {
       <header class="date-group__header"><h3>${formatDate(date)}${relativeLabel ? `<small>${relativeLabel}</small>` : ''}</h3><strong class="${net > 0 ? 'positive' : net < 0 ? 'negative' : ''}">${net === 0 ? currency(0) : signedCurrency(net)}</strong></header>
       ${records.map((transaction) => `<button class="transaction-row" type="button" data-edit-id="${transaction.id}" aria-label="編輯 ${escapeHTML(transactionTitle(transaction))} ${transactionAmountText(transaction)}${transaction.note ? `，備註 ${escapeHTML(transaction.note)}` : ''}">
         <span class="transaction-icon" aria-hidden="true">${transactionIcon(transaction)}</span>
-        <span class="transaction-details"><b class="${usesNoteAsPrimaryTitle(transaction) ? 'transaction-title--note' : ''}">${escapeHTML(transactionTitle(transaction))}</b><span>${escapeHTML(transactionMeta(transaction))}</span>${transactionNoteMarkup(transaction)}</span>
+        <span class="transaction-details">${transactionTitleMarkup(transaction)}<span>${escapeHTML(transactionMeta(transaction))}</span>${transactionNoteMarkup(transaction)}</span>
         <strong class="transaction-amount ${transaction.type}">${transactionAmountText(transaction)}</strong>
       </button>`).join('')}
     </section>`;

@@ -42,6 +42,7 @@ export async function runStage8Tests() {
     const [app, html, css] = await Promise.all([read('app.js'), read('index.html'), read('styles.css')]);
     assert(app.includes('createExpenseWithReimbursement') && app.includes('updateExpenseWithReimbursement') && app.includes("transaction.isReimbursement === true) return '報銷'"), '報銷新增或顯示流程缺失。');
     assert(app.includes('usesNoteAsPrimaryTitle(transaction)') && app.includes('relativeDateLabel(date)') && app.includes('reimbursementNoteTouched') && app.includes('state.form.reimbursementNote = state.form.note'), '其他支出／收入／報銷備註優先、報銷預設備註或日期標示缺失。');
+    assert(app.includes('transactionTitleMarkup(transaction)') && app.includes('class="transaction-kind"') && css.includes('.transaction-kind'), '報銷備註後的灰色標示缺失。');
     assert(html.includes('id="reimbursement-toggle"') && html.includes('id="reimbursement-note-input"'), '報銷操作或備註欄位不存在。');
     assert(/\.transaction-row\s*\{[^}]*min-height:\s*74px/.test(css) && css.includes('.transaction-title--note') && css.includes('.date-group__header h3 small'), '交易列密度、備註或日期視覺階級未更新。');
   });
