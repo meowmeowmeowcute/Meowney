@@ -36,7 +36,7 @@ export async function runStage7Tests() {
     await source.createTransaction({ type: 'income', amount: 300, accountId: bank.id, note: '餐費補助', date: '2026-08-25', time: '09:00' });
     await source.createTransaction({ type: 'transfer', amount: 80, sourceAccountId: bank.id, targetAccountId: cash.id, note: '轉存', date: '2026-08-25', time: '18:00' });
     await source.createTransaction({ type: 'expense', amount: 10, accountId: cash.id, parentCategoryId: other.id, note: '零星支出', date: '2026-08-25', time: '19:00' });
-    await source.createExpenseWithReimbursement({ type: 'expense', amount: 60, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '客戶晚餐', date: '2026-08-25', time: '20:00' }, '已送公司請款');
+    await source.createExpenseWithReimbursement({ type: 'expense', amount: 60, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '客戶晚餐', date: '2026-08-25', time: '20:00' }, { amount: 30, note: '已送公司請款' });
     await source.setSetting('initial-parent-categories-created', true);
     const sourceSnapshot = await source.getSnapshot();
     const backup = createBackup(sourceSnapshot, '2026-08-25T12:00:00.000Z');
@@ -48,7 +48,7 @@ export async function runStage7Tests() {
       const restored = await target.getSnapshot();
       assert(JSON.stringify(restored) === JSON.stringify(sourceSnapshot), '還原後資料與來源備份不一致。');
       const balances = calculateAccountBalances(restored.accounts, restored.transactions);
-      assert(balances.get(cash.id) === 944.5 && balances.get(bank.id) === 720, '還原後帳戶餘額錯誤。');
+      assert(balances.get(cash.id) === 914.5 && balances.get(bank.id) === 720, '還原後帳戶餘額錯誤。');
       const query = runTransactionQuery(restored.transactions, { parentCategoryId: food.id }, '2026-08-25');
       assert(query.expenseTotal === 185.5 && query.incomeTotal === 0, '無類別收入不應被母類別查詢納入。');
     });
@@ -83,7 +83,7 @@ export async function runStage7Tests() {
       assert(directExpense?.parentCategoryNameSnapshot === '其他' && directExpense.subcategoryId === null, '其他類別支出未正確保留在 JSON／CSV 資料中。');
       const reimbursement = sourceSnapshot.transactions.find((transaction) => transaction.isReimbursement === true);
       const reimbursementExpense = sourceSnapshot.transactions.find((transaction) => transaction.id === reimbursement?.reimbursementExpenseId);
-      assert(reimbursement?.note === '已送公司請款' && reimbursementExpense?.reimbursementTransactionId === reimbursement.id && csv.includes('報銷支出交易ID'), 'CSV 未保留報銷與備註關聯。');
+      assert(reimbursement?.amount === 30 && reimbursement?.note === '已送公司請款' && reimbursementExpense?.amount === 60 && reimbursementExpense?.reimbursementTransactionId === reimbursement.id && csv.includes('報銷支出交易ID'), 'CSV 未保留部分報銷與備註關聯。');
     });
 
     await test('CSV 預覽會正確統計新增、建立帳戶與建立類別，並可原子匯入', async () => {

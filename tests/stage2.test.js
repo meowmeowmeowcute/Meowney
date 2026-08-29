@@ -66,19 +66,21 @@ export async function runStage2Tests() {
       assert(await repository.getAccountBalance(cash.id) === 615, '其他類別支出沒有正確影響帳戶餘額。');
     });
 
-    await test('報銷會以原子方式新增連動收入，且可各自處理備註與刪除', async () => {
+    await test('報銷會以原子方式新增連動收入，且金額可獨立處理', async () => {
       const beforeCount = (await repository.listTransactions()).length;
-      const created = await repository.createExpenseWithReimbursement({ type: 'expense', amount: 80, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '客戶午餐', date: '2026-08-23', time: '12:30' });
+      const created = await repository.createExpenseWithReimbursement({ type: 'expense', amount: 80, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '客戶午餐', date: '2026-08-23', time: '12:30' }, { amount: 30, note: '客戶午餐' });
       assert(created.expense.reimbursementTransactionId === created.reimbursement.id && created.reimbursement.isReimbursement === true && created.reimbursement.reimbursementExpenseId === created.expense.id, '報銷交易沒有建立雙向連動。');
-      assert(created.reimbursement.type === 'income' && created.reimbursement.amount === 80 && created.reimbursement.note === '客戶午餐', '報銷沒有以同帳戶、同金額收入建立或帶入原支出備註。');
-      assert((await repository.listTransactions()).length === beforeCount + 2 && await repository.getAccountBalance(cash.id) === 615, '報銷新增後交易數或帳戶淨額錯誤。');
-      await repository.updateExpenseWithReimbursement(created.expense.id, { amount: 95, accountId: bank.id, date: '2026-08-24', time: '09:30' }, { enabled: true, note: '等待入帳' });
+      assert(created.reimbursement.type === 'income' && created.reimbursement.amount === 30 && created.reimbursement.note === '客戶午餐', '報銷沒有以獨立金額收入建立或帶入原支出備註。');
+      assert((await repository.listTransactions()).length === beforeCount + 2 && await repository.getAccountBalance(cash.id) === 565, '部分報銷新增後交易數或帳戶淨額錯誤。');
+      await repository.updateExpenseWithReimbursement(created.expense.id, { amount: 95, accountId: bank.id, date: '2026-08-24', time: '09:30' }, { enabled: true, amount: 30, note: '等待入帳' });
       const updated = await repository.listTransactions();
       const updatedExpense = updated.find((transaction) => transaction.id === created.expense.id);
       const updatedReimbursement = updated.find((transaction) => transaction.id === created.reimbursement.id);
-      assert(updatedExpense.amount === 95 && updatedReimbursement.amount === 95 && updatedReimbursement.accountId === bank.id && updatedReimbursement.note === '等待入帳', '修改原支出沒有同步更新報銷。');
-      await repository.updateReimbursementNote(created.reimbursement.id, '已核銷');
-      assert((await repository.listTransactions()).find((transaction) => transaction.id === created.reimbursement.id).note === '已核銷', '報銷備註無法單獨修改。');
+      assert(updatedExpense.amount === 95 && updatedReimbursement.amount === 30 && updatedReimbursement.accountId === bank.id && updatedReimbursement.date === '2026-08-24' && updatedReimbursement.time === '09:30' && updatedReimbursement.note === '等待入帳', '修改原支出意外同步報銷金額，或未同步帳戶與時間。');
+      await repository.updateReimbursementTransaction(created.reimbursement.id, { amount: 45, note: '已核銷' });
+      const independentlyUpdated = (await repository.listTransactions()).find((transaction) => transaction.id === created.reimbursement.id);
+      const sourceAfterReimbursementUpdate = (await repository.listTransactions()).find((transaction) => transaction.id === created.expense.id);
+      assert(independentlyUpdated.amount === 45 && independentlyUpdated.note === '已核銷' && sourceAfterReimbursementUpdate.amount === 95, '報銷金額或備註無法單獨修改。');
       await repository.deleteTransaction(created.expense.id);
       const remaining = await repository.listTransactions();
       assert(!remaining.some((transaction) => transaction.id === created.expense.id || transaction.id === created.reimbursement.id), '刪除原支出沒有一併刪除連動報銷。');

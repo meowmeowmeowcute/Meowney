@@ -111,7 +111,7 @@ function validateBackupData(data) {
   for (const transaction of transactions) {
     if (transaction.isReimbursement === true) {
       const expense = transactionsById.get(transaction.reimbursementExpenseId);
-      if (!expense || expense.type !== 'expense' || expense.reimbursementTransactionId !== transaction.id || transaction.parentCategoryId || transaction.subcategoryId || transaction.amount !== expense.amount || transaction.accountId !== expense.accountId || transaction.date !== expense.date || transaction.time !== expense.time) fail('報銷交易與原支出關聯錯誤。');
+      if (!expense || expense.type !== 'expense' || expense.reimbursementTransactionId !== transaction.id || transaction.parentCategoryId || transaction.subcategoryId || transaction.accountId !== expense.accountId || transaction.date !== expense.date || transaction.time !== expense.time) fail('報銷交易與原支出關聯錯誤。');
     }
     if (transaction.reimbursementTransactionId) {
       const reimbursement = transactionsById.get(transaction.reimbursementTransactionId);
@@ -269,7 +269,7 @@ function parseCsvRecords(fileText) {
   for (const record of records) {
     if (!record.reimbursementExpenseId) continue;
     const expense = recordsById.get(record.reimbursementExpenseId);
-    if (!expense || expense.type !== 'expense' || expense.reimbursementTransactionId || expense.amount !== record.amount || expense.date !== record.date || expense.time !== record.time || expense.accountName !== record.accountName || (expense.accountId && record.accountId && expense.accountId !== record.accountId)) {
+    if (!expense || expense.type !== 'expense' || expense.reimbursementTransactionId || expense.date !== record.date || expense.time !== record.time || expense.accountName !== record.accountName || (expense.accountId && record.accountId && expense.accountId !== record.accountId)) {
       fail(`CSV 第 ${record.line} 列的報銷原支出關聯錯誤。`);
     }
     expense.reimbursementTransactionId = record.id;

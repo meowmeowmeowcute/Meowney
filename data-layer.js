@@ -236,13 +236,19 @@ async function buildNormalTransaction(stores, input, type, existing = null) {
   };
 }
 
-function buildReimbursementTransaction(expense, note = '', existing = null) {
+function reimbursementDetails(input) {
+  if (typeof input === 'string') return { note: input };
+  return input && typeof input === 'object' ? input : {};
+}
+
+function buildReimbursementTransaction(expense, input = {}, existing = null) {
+  const details = reimbursementDetails(input);
   const transaction = transactionBase({
     id: existing?.id,
-    amount: expense.amount,
+    amount: details.amount === undefined ? existing?.amount ?? expense.amount : details.amount,
     date: expense.date,
     time: expense.time,
-    note,
+    note: details.note === undefined ? existing?.note ?? expense.note : details.note,
   }, 'income', existing);
   return {
     ...transaction,
@@ -401,7 +407,7 @@ async function validateReimbursementLink(stores, transaction) {
   if (transaction.isReimbursement === true) {
     if (transaction.type !== 'income' || !transaction.reimbursementExpenseId || transaction.reimbursementTransactionId) throw new DataValidationError('CSV 報銷交易關聯錯誤。');
     const expense = await mustGet(stores.transactions, transaction.reimbursementExpenseId, '報銷原支出');
-    if (expense.type !== 'expense' || expense.reimbursementTransactionId !== transaction.id || expense.amount !== transaction.amount || expense.accountId !== transaction.accountId || expense.date !== transaction.date || expense.time !== transaction.time) {
+    if (expense.type !== 'expense' || expense.reimbursementTransactionId !== transaction.id || expense.accountId !== transaction.accountId || expense.date !== transaction.date || expense.time !== transaction.time) {
       throw new DataValidationError('CSV 報銷與原支出不一致。');
     }
   }
@@ -556,11 +562,15 @@ export class MeowneyRepository {
     });
   }
 
-  async createExpenseWithReimbursement(input, reimbursementNote) {
+  async createExpenseWithReimbursement(input, reimbursementInput = {}) {
     if (requireTransactionType(input.type) !== 'expense') throw new DataValidationError('只有支出可以新增報銷。');
     return this.write([STORE.accounts, STORE.parentCategories, STORE.subcategories, STORE.transactions], async (stores) => {
       const expense = await buildNormalTransaction(stores, input, 'expense');
-      const reimbursement = buildReimbursementTransaction(expense, reimbursementNote === undefined ? expense.note : reimbursementNote);
+      const details = reimbursementDetails(reimbursementInput);
+      const reimbursement = buildReimbursementTransaction(expense, {
+        amount: details.amount === undefined ? expense.amount : details.amount,
+        note: details.note === undefined ? expense.note : details.note,
+      });
       const linkedExpense = { ...expense, reimbursementTransactionId: reimbursement.id };
       await requestAsPromise(stores.transactions.add(linkedExpense));
       await requestAsPromise(stores.transactions.add(reimbursement));
@@ -571,7 +581,7 @@ export class MeowneyRepository {
   async updateTransaction(id, input) {
     return this.write([STORE.accounts, STORE.parentCategories, STORE.subcategories, STORE.transactions], async (stores) => {
       const existing = await mustGet(stores.transactions, id, '交易');
-      if (existing.isReimbursement === true) throw new DataValidationError('報銷項目只能修改備註；請由原支出修改金額、帳戶與日期。');
+      if (existing.isReimbursement === true) throw new DataValidationError('報銷項目請直接修改報銷金額或備註。');
       if (existing.reimbursementTransactionId) throw new DataValidationError('此支出含連動報銷，請使用報銷支出更新操作。');
       const requestedType = input.type ? requireTransactionType(input.type) : existing.type;
       if (requestedType !== existing.type) throw new DataValidationError('既有交易不可變更類型。');
@@ -583,7 +593,7 @@ export class MeowneyRepository {
     });
   }
 
-  async updateExpenseWithReimbursement(id, input, { enabled = false, note } = {}) {
+  async updateExpenseWithReimbursement(id, input, { enabled = false, amount, note } = {}) {
     return this.write([STORE.accounts, STORE.parentCategories, STORE.subcategories, STORE.transactions], async (stores) => {
       const existing = await mustGet(stores.transactions, id, '支出');
       if (existing.type !== 'expense' || existing.isReimbursement === true) throw new DataValidationError('只有一般支出可以設定報銷。');
@@ -599,7 +609,10 @@ export class MeowneyRepository {
         if (existingReimbursement) await requestAsPromise(stores.transactions.delete(existingReimbursement.id));
         return { expense: { ...expense, reimbursementTransactionId: null }, reimbursement: null };
       }
-      const reimbursement = buildReimbursementTransaction(expense, note === undefined ? existingReimbursement?.note ?? expense.note : note, existingReimbursement);
+      const reimbursement = buildReimbursementTransaction(expense, {
+        amount: amount === undefined ? existingReimbursement?.amount ?? expense.amount : amount,
+        note: note === undefined ? existingReimbursement?.note ?? expense.note : note,
+      }, existingReimbursement);
       const linkedExpense = { ...expense, reimbursementTransactionId: reimbursement.id };
       await requestAsPromise(stores.transactions.put(linkedExpense));
       await requestAsPromise(stores.transactions.put(reimbursement));
@@ -607,16 +620,20 @@ export class MeowneyRepository {
     });
   }
 
-  async updateReimbursementNote(id, note) {
+  async updateReimbursementTransaction(id, input) {
     return this.write(STORE.transactions, async ({ transactions }) => {
       const reimbursement = await mustGet(transactions, id, '報銷交易');
-      if (reimbursement.isReimbursement !== true || reimbursement.type !== 'income') throw new DataValidationError('只有報銷項目可以修改報銷備註。');
+      if (reimbursement.isReimbursement !== true || reimbursement.type !== 'income') throw new DataValidationError('只有報銷項目可以修改報銷金額或備註。');
       const expense = await mustGet(transactions, reimbursement.reimbursementExpenseId, '報銷原支出');
       if (expense.type !== 'expense' || expense.reimbursementTransactionId !== reimbursement.id) throw new DataValidationError('報銷連動資料錯誤，請先備份後再重試。');
-      const updated = buildReimbursementTransaction(expense, note, reimbursement);
+      const updated = buildReimbursementTransaction(expense, input, reimbursement);
       await requestAsPromise(transactions.put(updated));
       return updated;
     });
+  }
+
+  async updateReimbursementNote(id, note) {
+    return this.updateReimbursementTransaction(id, { note });
   }
 
   async deleteTransaction(id) {

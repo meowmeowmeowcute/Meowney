@@ -189,6 +189,8 @@ textarea { padding: 11px; resize: vertical; }
 .reimbursement-toggle--active { border-color: var(--accent); background: #1e493a; }
 .reimbursement-toggle--active i { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); font-size: 0; }
 .reimbursement-toggle--active i::after { content: '✓'; font-size: 15px; font-weight: 900; }
+.reimbursement-amount-field { margin-top: 11px; }
+.reimbursement-amount-field input { font-size: 17px; font-variant-numeric: tabular-nums; text-align: right; }
 .reimbursement-note-field { margin-top: 11px; }
 .reimbursement-linked-info { margin: 18px 0 0; padding: 11px 12px; border: 1px solid #3c594d; border-radius: 12px; background: #1d3029; color: #c4dfd1; font-size: 12px; line-height: 1.45; }
 .date-toggle { display: grid; width: 100%; grid-template-columns: 1fr auto 16px; gap: 10px; align-items: center; margin: 18px 0 10px; padding: 14px 0; border: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: transparent; color: var(--text); text-align: left; }

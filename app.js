@@ -206,7 +206,7 @@ function renderSettings() {
 }
 
 function createBlankForm() {
-  return { id: null, type: 'expense', amountText: '', accountId: null, parentId: null, categoryId: null, sourceAccountId: null, targetAccountId: null, note: '', reimbursementEnabled: false, reimbursementNote: '', reimbursementNoteTouched: false, isReimbursement: false, date: todayValue(), time: timeValue(), dateTimeExpanded: false };
+  return { id: null, type: 'expense', amountText: '', accountId: null, parentId: null, categoryId: null, sourceAccountId: null, targetAccountId: null, note: '', reimbursementEnabled: false, reimbursementAmountText: '', reimbursementAmountTouched: false, reimbursementNote: '', reimbursementNoteTouched: false, isReimbursement: false, date: todayValue(), time: timeValue(), dateTimeExpanded: false };
 }
 
 function formFromTransaction(transaction) {
@@ -222,6 +222,8 @@ function formFromTransaction(transaction) {
     targetAccountId: transaction.targetAccountId || null,
     note: transaction.note || '',
     reimbursementEnabled: Boolean(reimbursement),
+    reimbursementAmountText: reimbursement ? String(reimbursement.amount) : '',
+    reimbursementAmountTouched: Boolean(reimbursement),
     reimbursementNote: reimbursement?.note || '',
     reimbursementNoteTouched: Boolean(reimbursement),
     isReimbursement: transaction.isReimbursement === true,
@@ -278,7 +280,9 @@ function renderSheet() {
   $('#reimbursement-linked-info').hidden = !reimbursementReadOnly;
   $('#reimbursement-toggle').setAttribute('aria-pressed', String(form.reimbursementEnabled));
   $('#reimbursement-toggle').classList.toggle('reimbursement-toggle--active', form.reimbursementEnabled);
-  $('#reimbursement-toggle-status').textContent = form.reimbursementEnabled ? '會新增一筆收入' : '不產生報銷收入';
+  $('#reimbursement-toggle-status').textContent = form.reimbursementEnabled ? '會新增一筆可自訂金額的收入' : '不產生報銷收入';
+  $('#reimbursement-amount-field').hidden = !form.reimbursementEnabled || form.type !== 'expense' || reimbursementReadOnly;
+  $('#reimbursement-amount-input').value = form.reimbursementAmountText;
   $('#reimbursement-note-field').hidden = !form.reimbursementEnabled || form.type !== 'expense' || reimbursementReadOnly;
   $('#reimbursement-note-input').value = form.reimbursementNote;
   $('#note-field-label').textContent = reimbursementReadOnly ? '報銷備註（選填）' : '備註（選填）';
@@ -288,7 +292,7 @@ function renderSheet() {
   $('#toggle-date-time').hidden = reimbursementReadOnly;
   $('#date-time-fields').hidden = reimbursementReadOnly || !form.dateTimeExpanded;
   $('#date-time-summary').textContent = `${form.date.replaceAll('-', '/')} ${form.time}`;
-  $$('.number-pad button').forEach((button) => { button.disabled = reimbursementReadOnly; });
+  $$('.number-pad button').forEach((button) => { button.disabled = false; });
   $('#parent-options').innerHTML = state.categories.map((parent) => `<button type="button" class="parent-tab ${parent.id === form.parentId ? 'parent-tab--active' : ''}" data-parent-id="${parent.id}" aria-pressed="${parent.id === form.parentId}">${escapeHTML(parent.name)}</button>`).join('');
   const parent = selectedParent();
   $('#category-guidance').textContent = parent?.allowsDirectExpense ? '「其他」不需要子類別' : '先選母類別，再選子類別';
@@ -314,11 +318,16 @@ function appendAmount(key) {
   else if (key === '.' && !state.form.amountText) state.form.amountText = '0.';
   else if (state.form.amountText.length < 10) state.form.amountText += key;
   $('#amount-display').textContent = currency(Number(state.form.amountText) || 0);
+  if (state.form.reimbursementEnabled && !state.form.reimbursementAmountTouched) {
+    state.form.reimbursementAmountText = state.form.amountText;
+    $('#reimbursement-amount-input').value = state.form.reimbursementAmountText;
+  }
 }
 
 function validationError() {
   const form = state.form;
   if (!Number.isFinite(Number(form.amountText)) || Number(form.amountText) <= 0) return '請輸入大於 0 的金額。';
+  if (form.type === 'expense' && form.reimbursementEnabled && (!Number.isFinite(Number(form.reimbursementAmountText)) || Number(form.reimbursementAmountText) <= 0)) return '請輸入大於 0 的報銷金額。';
   if (!form.date || !form.time) return '請選擇完整的日期與時間。';
   if (form.type === 'transfer') {
     if (!form.sourceAccountId || !form.targetAccountId) return '請選擇來源帳戶與目的帳戶。';
@@ -346,10 +355,10 @@ async function saveTransaction() {
   try {
     const input = transactionInputFromForm();
     const createdWithReimbursement = !state.editingId && state.form.type === 'expense' && state.form.reimbursementEnabled;
-    if (state.editingId && state.form.isReimbursement) await state.repository.updateReimbursementNote(state.editingId, state.form.note.trim());
-    else if (state.editingId && state.form.type === 'expense') await state.repository.updateExpenseWithReimbursement(state.editingId, input, { enabled: state.form.reimbursementEnabled, note: state.form.reimbursementNote.trim() });
+    if (state.editingId && state.form.isReimbursement) await state.repository.updateReimbursementTransaction(state.editingId, { amount: Number(state.form.amountText), note: state.form.note.trim() });
+    else if (state.editingId && state.form.type === 'expense') await state.repository.updateExpenseWithReimbursement(state.editingId, input, { enabled: state.form.reimbursementEnabled, amount: Number(state.form.reimbursementAmountText), note: state.form.reimbursementNote.trim() });
     else if (state.editingId) await state.repository.updateTransaction(state.editingId, input);
-    else if (state.form.type === 'expense' && state.form.reimbursementEnabled) await state.repository.createExpenseWithReimbursement(input, state.form.reimbursementNote.trim());
+    else if (state.form.type === 'expense' && state.form.reimbursementEnabled) await state.repository.createExpenseWithReimbursement(input, { amount: Number(state.form.reimbursementAmountText), note: state.form.reimbursementNote.trim() });
     else await state.repository.createTransaction(input);
     const edited = Boolean(state.editingId);
     await loadData();
@@ -675,8 +684,13 @@ function initialiseEvents() {
     if (!state.form || state.form.type !== 'expense' || state.form.isReimbursement) return;
     const enabling = !state.form.reimbursementEnabled;
     state.form.reimbursementEnabled = enabling;
+    if (enabling && !state.form.reimbursementAmountTouched) state.form.reimbursementAmountText = state.form.amountText;
     if (enabling && !state.form.reimbursementNoteTouched) state.form.reimbursementNote = state.form.note;
     renderSheet();
+  });
+  $('#reimbursement-amount-input').addEventListener('input', (event) => {
+    state.form.reimbursementAmountText = event.target.value;
+    state.form.reimbursementAmountTouched = true;
   });
   $('#reimbursement-note-input').addEventListener('input', (event) => { state.form.reimbursementNote = event.target.value; state.form.reimbursementNoteTouched = true; });
   $('#date-input').addEventListener('input', (event) => { state.form.date = event.target.value; $('#date-time-summary').textContent = `${state.form.date.replaceAll('-', '/')} ${state.form.time}`; });
