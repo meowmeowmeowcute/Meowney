@@ -20,7 +20,7 @@ export async function runStage6Tests() {
   });
   await test('應用殼層完整快取所有執行期本機資源', async () => {
     const worker = await read('service-worker.js');
-    for (const asset of ['./index.html', './styles.css', './app.js', './data-layer.js', './query-logic.js', './backup-format.js', './manifest.webmanifest', './icons/meowney.svg', './icons/meowney-192.png', './icons/meowney-512.png']) {
+    for (const asset of ['./index.html', './styles.css', './app.js', './data-layer.js', './query-logic.js', './backup-format.js', './manifest.webmanifest', './icons/meowney-192.png', './icons/meowney-512.png']) {
       assert(worker.includes(`'${asset}'`), `快取清單缺少 ${asset}。`);
     }
     assert(worker.includes("new Request(asset, { cache: 'reload' })") && worker.includes("cache.put('./index.html', response.clone())"), '更新時沒有重新取得完整殼層或更新頁面快取。');
@@ -42,7 +42,7 @@ export async function runStage6Tests() {
     }
     assert(html.includes('href="manifest.webmanifest"') && html.includes('href="styles.css"') && html.includes('src="app.js"'), '頁面資源不是相對路徑。');
     assert(new URL('./service-worker.js', 'https://meowmeowmeowcute.github.io/Meowney/app.js').pathname === '/Meowney/service-worker.js', 'Service Worker 註冊路徑會離開 GitHub Pages 子路徑。');
-    for (const asset of ['./', './index.html', './styles.css', './app.js', './data-layer.js', './query-logic.js', './backup-format.js', './manifest.webmanifest', './icons/meowney.svg', './icons/meowney-192.png', './icons/meowney-512.png']) {
+    for (const asset of ['./', './index.html', './styles.css', './app.js', './data-layer.js', './query-logic.js', './backup-format.js', './manifest.webmanifest', './icons/meowney-192.png', './icons/meowney-512.png']) {
       assert(worker.includes(`'${asset}'`) && new URL(asset, manifestUrl).pathname.startsWith('/Meowney/'), `離線快取資源 ${asset} 未保留 GitHub Pages 子路徑。`);
     }
     assert(app.includes("new URL('./service-worker.js', import.meta.url)"), 'Service Worker 未使用模組相對路徑。');

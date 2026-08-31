@@ -1,4 +1,4 @@
-const CACHE_NAME = 'meowney-app-shell-v11';
+const CACHE_NAME = 'meowney-app-shell-v12';
 const APP_SHELL = [
   './',
   './index.html',
@@ -8,7 +8,6 @@ const APP_SHELL = [
   './query-logic.js',
   './backup-format.js',
   './manifest.webmanifest',
-  './icons/meowney.svg',
   './icons/meowney-192.png',
   './icons/meowney-512.png',
 ];
