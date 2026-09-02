@@ -66,6 +66,24 @@ export async function runStage2Tests() {
       assert(await repository.getAccountBalance(cash.id) === 615, '其他類別支出沒有正確影響帳戶餘額。');
     });
 
+    await test('請款單可原子標記多筆支出，且可逐筆退回未請款', async () => {
+      const directExpense = (await repository.listTransactions()).find((transaction) => transaction.note === '零星支出');
+      const secondExpense = await repository.createTransaction({ type: 'expense', amount: 10, accountId: bank.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '待請款車資', isPlannedClaim: true, date: '2026-08-23', time: '12:15' });
+      const balancesBefore = calculateAccountBalances(await repository.listAccounts(), await repository.listTransactions());
+      const batch = await repository.createClaimBatch([directExpense.id, secondExpense.id], '八月費用請款');
+      const submitted = await repository.listTransactions();
+      assert(submitted.filter((transaction) => transaction.claimBatchId === batch.claimBatchId).length === 2 && submitted.every((transaction) => transaction.claimBatchId !== batch.claimBatchId || transaction.claimNote === '八月費用請款'), '請款單沒有原子標記選取項目或保存備註。');
+      assert(JSON.stringify([...calculateAccountBalances(await repository.listAccounts(), submitted)]) === JSON.stringify([...balancesBefore]), '建立請款單不應改變帳戶餘額。');
+      await repository.returnClaimBatchItems([directExpense.id]);
+      const returned = await repository.listTransactions();
+      const returnedExpense = returned.find((transaction) => transaction.id === directExpense.id);
+      const stillSubmitted = returned.find((transaction) => transaction.id === secondExpense.id);
+      assert(returnedExpense.isPlannedClaim === true && returnedExpense.claimBatchId === null && stillSubmitted.claimBatchId === batch.claimBatchId, '部分退回未請款沒有維持其他請款單項目。');
+      await repository.updateExpenseWithReimbursement(secondExpense.id, {}, { enabled: true, amount: 5, note: '已核銷車資' });
+      const reimbursedSource = (await repository.listTransactions()).find((transaction) => transaction.id === secondExpense.id);
+      assert(reimbursedSource.isPlannedClaim === false && reimbursedSource.claimBatchId === null && reimbursedSource.claimNote === null, '實際報銷後沒有取消請款單與預計請款狀態。');
+    });
+
     await test('報銷會以原子方式新增連動收入，且金額可獨立處理', async () => {
       const beforeCount = (await repository.listTransactions()).length;
       const created = await repository.createExpenseWithReimbursement({ type: 'expense', amount: 80, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '客戶午餐', isPlannedClaim: true, date: '2026-08-23', time: '12:30' }, { amount: 30, note: '客戶午餐' });
@@ -87,7 +105,7 @@ export async function runStage2Tests() {
     });
 
     await test('刪除帳戶與子類別後，歷史交易保留名稱快照', async () => {
-      const transaction = (await repository.listTransactions()).find((item) => item.subcategoryId === meal.id);
+      const transaction = (await repository.listTransactions()).find((item) => item.subcategoryId === meal.id && item.accountId === cash.id);
       await repository.deleteAccount(cash.id);
       await repository.deleteSubcategory(meal.id);
       const saved = (await repository.listTransactions()).find((item) => item.id === transaction.id);

@@ -13,6 +13,8 @@ const state = {
   sheetOpener: null,
   selectedAccountId: null,
   csvImportText: null,
+  claimSelection: new Set(),
+  claimSelectionStatus: null,
 };
 
 const DEFAULT_PARENT_CATEGORIES = ['購物', '吃喝', '交通', '娛樂', '生活', DIRECT_EXPENSE_PARENT_CATEGORY_NAME];
@@ -137,7 +139,7 @@ function transactionTitleMarkup(transaction) {
     ? '<small class="transaction-kind">報銷</small>'
     : '';
   const plannedClaimLabel = transaction.type === 'expense' && transaction.isPlannedClaim === true
-    ? '<small class="transaction-kind transaction-kind--planned">預計請款</small>'
+    ? `<small class="transaction-kind transaction-kind--planned ${transaction.claimBatchId ? 'transaction-kind--submitted' : ''}">${transaction.claimBatchId ? '已請款' : '預計請款'}</small>`
     : '';
   const titleClass = usesNoteAsPrimaryTitle(transaction)
     ? 'transaction-title--note'
@@ -167,6 +169,48 @@ function transactionNoteMarkup(transaction) {
 }
 function queryTransactionRowMarkup(transaction) {
   return `<div class="query-row"><div><b>${escapeHTML(transactionTitle(transaction))}</b><span>${escapeHTML(transaction.date)} · ${escapeHTML(transaction.accountName)} · ${escapeHTML(transaction.time)}</span>${transactionNoteMarkup(transaction)}</div><strong class="${transaction.type}">${transactionAmountText(transaction)}</strong></div>`;
+}
+function prepareClaimSelection(status, transactions) {
+  const availableIds = new Set(transactions.map((transaction) => transaction.id));
+  if (state.claimSelectionStatus !== status) {
+    state.claimSelection = new Set(availableIds);
+    state.claimSelectionStatus = status;
+    return;
+  }
+  state.claimSelection = new Set([...state.claimSelection].filter((id) => availableIds.has(id)));
+}
+function claimSelectionRowMarkup(transaction) {
+  const selected = state.claimSelection.has(transaction.id);
+  return `<label class="claim-selectable"><input type="checkbox" data-claim-select="${transaction.id}" ${selected ? 'checked' : ''} aria-label="選擇 ${escapeHTML(transactionTitle(transaction))}" />${queryTransactionRowMarkup(transaction)}</label>`;
+}
+function submittedClaimBatchMarkup(transactions) {
+  const batches = new Map();
+  transactions.forEach((transaction) => {
+    const batch = batches.get(transaction.claimBatchId) || { note: transaction.claimNote || '', transactions: [] };
+    batch.transactions.push(transaction);
+    batches.set(transaction.claimBatchId, batch);
+  });
+  return [...batches.values()].map((batch) => {
+    const total = batch.transactions.reduce((sum, transaction) => sum + transaction.amount, 0);
+    return `<article class="claim-batch"><header class="claim-batch__header"><div><b>請款單</b><span>${escapeHTML(batch.note || '未填寫請款備註')}</span></div><strong>${batch.transactions.length} 筆 · ${currency(total)}</strong></header>${batch.transactions.map(claimSelectionRowMarkup).join('')}</article>`;
+  }).join('');
+}
+function updateClaimActionLabel(status, transactionCount) {
+  const selectedCount = state.claimSelection.size;
+  if (status === 'planned') {
+    $('#create-claim-batch').disabled = selectedCount === 0;
+    $('#create-claim-batch').textContent = `建立請款單（${selectedCount}/${transactionCount}）`;
+  } else {
+    $('#return-claim-batch-items').disabled = selectedCount === 0;
+    $('#return-claim-batch-items').textContent = `退回未請款（${selectedCount}/${transactionCount}）`;
+  }
+}
+function bindClaimSelection(status, transactionCount) {
+  $$('[data-claim-select]').forEach((input) => input.addEventListener('change', () => {
+    if (input.checked) state.claimSelection.add(input.dataset.claimSelect);
+    else state.claimSelection.delete(input.dataset.claimSelect);
+    updateClaimActionLabel(status, transactionCount);
+  }));
 }
 
 function renderTransactions() {
@@ -231,6 +275,8 @@ function formFromTransaction(transaction) {
     targetAccountId: transaction.targetAccountId || null,
     note: transaction.note || '',
     isPlannedClaim: transaction.isPlannedClaim === true,
+    claimBatchId: transaction.claimBatchId || null,
+    claimNote: transaction.claimNote || '',
     reimbursementEnabled: Boolean(reimbursement),
     reimbursementAmountText: reimbursement ? String(reimbursement.amount) : '',
     reimbursementAmountTouched: Boolean(reimbursement),
@@ -278,6 +324,7 @@ function renderSheet() {
   const form = state.form;
   if (!form) return;
   const reimbursementReadOnly = form.isReimbursement === true;
+  const claimSubmitted = Boolean(form.claimBatchId);
   $$('.type-switch__item').forEach((button) => {
     button.classList.toggle('type-switch__item--active', button.dataset.type === form.type);
     button.disabled = Boolean(form.id);
@@ -286,7 +333,9 @@ function renderSheet() {
   $('#category-section').hidden = form.type !== 'expense';
   $('#single-account-section').hidden = form.type === 'transfer' || reimbursementReadOnly;
   $('#transfer-account-section').hidden = form.type !== 'transfer';
-  $('#planned-claim-section').hidden = form.type !== 'expense' || reimbursementReadOnly;
+  $('#planned-claim-section').hidden = form.type !== 'expense' || reimbursementReadOnly || claimSubmitted;
+  $('#claim-submitted-info').hidden = !claimSubmitted;
+  $('#claim-submitted-info').textContent = claimSubmitted ? `此筆已請款${form.claimNote ? `：${form.claimNote}` : '。'}如無法請款，請至「查詢」退回未請款。` : '';
   $('#reimbursement-section').hidden = form.type !== 'expense' || reimbursementReadOnly;
   $('#planned-claim-toggle').setAttribute('aria-pressed', String(form.isPlannedClaim));
   $('#planned-claim-toggle').classList.toggle('reimbursement-toggle--active', form.isPlannedClaim);
@@ -470,11 +519,15 @@ function renderQuery() {
   const categoryId = $('#query-category').value;
   const hasParent = parentId !== 'all';
   const hasCategory = categoryId !== 'all';
-  const hasPlannedClaims = $('#query-claim-status').value === 'planned';
+  const claimStatus = $('#query-claim-status').value;
+  const hasPlannedClaims = claimStatus === 'planned';
+  const hasSubmittedClaims = claimStatus === 'submitted';
+  const hasClaimResults = hasPlannedClaims || hasSubmittedClaims;
   $('#parent-query-details').hidden = !hasParent || Boolean(query.error);
-  $('#subcategory-query-details').hidden = !hasCategory || Boolean(query.error);
-  $('#planned-claim-query-details').hidden = !hasPlannedClaims || hasCategory || Boolean(query.error);
-  $('#query-guidance').hidden = hasParent || hasCategory || hasPlannedClaims || Boolean(query.error);
+  $('#subcategory-query-details').hidden = !hasCategory || hasClaimResults || Boolean(query.error);
+  $('#planned-claim-query-details').hidden = !hasPlannedClaims || Boolean(query.error);
+  $('#submitted-claim-query-details').hidden = !hasSubmittedClaims || Boolean(query.error);
+  $('#query-guidance').hidden = hasParent || hasCategory || hasClaimResults || Boolean(query.error);
   if (hasParent && !query.error) {
     const breakdown = parentCategoryBreakdown(query.results, parentId);
     const parentName = $('#query-parent').selectedOptions[0]?.textContent.replace('（已刪除）', '') || '母類別';
@@ -494,12 +547,27 @@ function renderQuery() {
       ? summary.transactions.map(queryTransactionRowMarkup).join('')
       : '<div class="empty-state">沒有符合條件的交易。</div>';
   }
-  if (hasPlannedClaims && !hasCategory && !query.error) {
+  if (hasPlannedClaims && !query.error) {
+    prepareClaimSelection('planned', query.results);
     $('#planned-claim-query-total').textContent = currency(query.expenseTotal);
     $('#planned-claim-query-count').textContent = `${query.count} 筆`;
     $('#planned-claim-query-list').innerHTML = query.results.length
-      ? query.results.map(queryTransactionRowMarkup).join('')
+      ? query.results.map(claimSelectionRowMarkup).join('')
       : '<div class="empty-state">沒有尚未請款的支出。</div>';
+    $('#planned-claim-actions').hidden = !query.results.length;
+    updateClaimActionLabel('planned', query.results.length);
+    bindClaimSelection('planned', query.results.length);
+  }
+  if (hasSubmittedClaims && !query.error) {
+    prepareClaimSelection('submitted', query.results);
+    $('#submitted-claim-query-total').textContent = currency(query.expenseTotal);
+    $('#submitted-claim-query-count').textContent = `${query.count} 筆`;
+    $('#submitted-claim-query-list').innerHTML = query.results.length
+      ? submittedClaimBatchMarkup(query.results)
+      : '<div class="empty-state">沒有已請款的支出。</div>';
+    $('#submitted-claim-actions').hidden = !query.results.length;
+    updateClaimActionLabel('submitted', query.results.length);
+    bindClaimSelection('submitted', query.results.length);
   }
 }
 
@@ -511,6 +579,37 @@ function showToast(message) {
   $('#toast').hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { $('#toast').hidden = true; }, 3600);
+}
+
+async function createClaimBatch() {
+  const transactionIds = [...state.claimSelection];
+  if (!transactionIds.length) return showToast('請至少選擇一筆未請款支出。');
+  try {
+    const batch = await state.repository.createClaimBatch(transactionIds, $('#claim-note-input').value);
+    state.claimSelection.clear();
+    state.claimSelectionStatus = null;
+    $('#claim-note-input').value = '';
+    await loadData();
+    render();
+    showToast(`已建立請款單，共 ${batch.transactionIds.length} 筆。`);
+  } catch (error) {
+    showToast(error.message || '建立請款單時發生問題。');
+  }
+}
+
+async function returnClaimBatchItems() {
+  const transactionIds = [...state.claimSelection];
+  if (!transactionIds.length) return showToast('請至少選擇一筆已請款支出。');
+  try {
+    await state.repository.returnClaimBatchItems(transactionIds);
+    state.claimSelection.clear();
+    state.claimSelectionStatus = null;
+    await loadData();
+    render();
+    showToast(`已退回 ${transactionIds.length} 筆未請款項目。`);
+  } catch (error) {
+    showToast(error.message || '退回未請款時發生問題。');
+  }
 }
 
 function downloadTextFile(content, filename, mimeType) {
@@ -713,7 +812,7 @@ function initialiseEvents() {
     renderSheet();
   });
   $('#planned-claim-toggle').addEventListener('click', () => {
-    if (!state.form || state.form.type !== 'expense' || state.form.isReimbursement) return;
+    if (!state.form || state.form.type !== 'expense' || state.form.isReimbursement || state.form.claimBatchId) return;
     state.form.isPlannedClaim = !state.form.isPlannedClaim;
     renderSheet();
   });
@@ -733,6 +832,8 @@ function initialiseEvents() {
   $('#run-query').addEventListener('click', renderQuery);
   $('#query-date').addEventListener('change', updateQueryDateInput);
   $('#query-parent').addEventListener('change', () => { refreshQueryOptions(); renderQuery(); });
+  $('#create-claim-batch').addEventListener('click', createClaimBatch);
+  $('#return-claim-batch-items').addEventListener('click', returnClaimBatchItems);
   $('#export-json').addEventListener('click', exportJsonBackup);
   $('#import-json').addEventListener('click', () => $('#json-import-input').click());
   $('#json-import-input').addEventListener('change', async (event) => {

@@ -50,7 +50,13 @@ export async function runStage8Tests() {
     const [app, html, dataLayer] = await Promise.all([read('app.js'), read('index.html'), read('data-layer.js')]);
     assert(html.includes('id="planned-claim-toggle"') && html.includes('id="query-claim-status"') && html.includes('id="planned-claim-query-list"'), '預計請款切換或查詢結果入口不存在。');
     assert(app.includes("claimStatus: $('#query-claim-status').value") && app.includes("state.form.isPlannedClaim = !state.form.isPlannedClaim"), '預計請款表單或查詢沒有連接。');
-    assert(dataLayer.includes('isPlannedClaim: false, reimbursementTransactionId: reimbursement.id'), '新增報銷時沒有自動取消預計請款。');
+    assert(dataLayer.includes('isPlannedClaim: false, claimBatchId: null, claimNote: null, reimbursementTransactionId: reimbursement.id'), '新增報銷時沒有自動取消預計請款。');
+  });
+  await test('請款單可選取建立、依備註分組並逐筆退回未請款', async () => {
+    const [app, html, dataLayer] = await Promise.all([read('app.js'), read('index.html'), read('data-layer.js')]);
+    assert(html.includes('id="create-claim-batch"') && html.includes('id="claim-note-input"') && html.includes('id="return-claim-batch-items"'), '請款單建立、備註或退回入口不存在。');
+    assert(app.includes('submittedClaimBatchMarkup') && app.includes('createClaimBatch(transactionIds') && app.includes('returnClaimBatchItems(transactionIds)'), '請款單選取、分組或退回流程沒有連接。');
+    assert(dataLayer.includes('async createClaimBatch') && dataLayer.includes('async returnClaimBatchItems'), '請款單資料操作不存在。');
   });
   await test('交付文件、離線資源與標準測試入口均已存在', async () => {
     for (const file of ['README.md', 'manifest.webmanifest', 'service-worker.js', 'backup-format.js', 'tests/run-node-tests.mjs']) {

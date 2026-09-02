@@ -1,6 +1,6 @@
 const DATE_MODES = new Set(['all', 'today', 'month', 'date', 'specific-month']);
 const TYPE_VALUES = new Set(['all', 'expense', 'income']);
-const CLAIM_STATUS_VALUES = new Set(['all', 'planned']);
+const CLAIM_STATUS_VALUES = new Set(['all', 'planned', 'submitted']);
 
 function localDateValue(value = new Date()) {
   if (typeof value === 'string') return value;
@@ -70,7 +70,8 @@ export function normalizeQueryFilters(rawFilters = {}, now = new Date()) {
 export function matchesQuery(transaction, filters) {
   if (transaction.type === 'transfer') return false;
   if (filters.type !== 'all' && transaction.type !== filters.type) return false;
-  if (filters.claimStatus === 'planned' && (transaction.type !== 'expense' || transaction.isPlannedClaim !== true)) return false;
+  if (filters.claimStatus === 'planned' && (transaction.type !== 'expense' || transaction.isPlannedClaim !== true || transaction.claimBatchId)) return false;
+  if (filters.claimStatus === 'submitted' && (transaction.type !== 'expense' || transaction.isPlannedClaim !== true || !transaction.claimBatchId)) return false;
   if (filters.accountId && transaction.accountId !== filters.accountId) return false;
   if (filters.parentCategoryId && transaction.parentCategoryId !== filters.parentCategoryId) return false;
   if (filters.subcategoryId && transaction.subcategoryId !== filters.subcategoryId) return false;
