@@ -67,7 +67,6 @@ h3 em { color: var(--muted); font-size: 12px; font-style: normal; font-weight: 5
 .transaction-details b.transaction-title--note, .transaction-details b.transaction-title--with-kind { overflow: visible; text-overflow: clip; white-space: pre-wrap; line-height: 1.35; overflow-wrap: anywhere; }
 .transaction-title--note .transaction-kind, .transaction-title--with-kind .transaction-kind { display: inline; margin-left: 7px; color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: 0; white-space: nowrap; }
 .transaction-kind--planned { color: #e8bd6a !important; }
-.transaction-kind--submitted { color: #82c7ff !important; }
 .transaction-details span { margin-top: 3px; color: var(--muted); font-size: 11px; }
 .transaction-note { display: block; margin-top: 4px; color: #c7d0cc; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; white-space: pre-wrap; }
 .transaction-amount { align-self: center; font-size: 17px; font-weight: 800; letter-spacing: -.02em; white-space: nowrap; }
@@ -118,12 +117,6 @@ textarea { padding: 11px; resize: vertical; }
 .claim-selectable { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255, 255, 255, .06); cursor: pointer; }
 .claim-selectable input { width: 21px; height: 21px; min-height: 0; accent-color: var(--accent); }
 .claim-selectable .query-row { padding: 0; border: 0; }
-.claim-batch { margin-top: 11px; padding: 12px; border: 1px solid #3e5262; border-radius: 14px; background: #182126; }
-.claim-batch:first-child { margin-top: 0; }
-.claim-batch__header { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
-.claim-batch__header b { display: block; }
-.claim-batch__header span { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-.claim-batch__header strong { color: #a7d9ff; font-size: 13px; white-space: nowrap; }
 .settings-group { padding: 8px 16px; }
 .settings-group h2 { margin: 10px 0; }
 .settings-group-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

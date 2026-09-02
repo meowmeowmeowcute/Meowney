@@ -213,6 +213,9 @@ async function buildNormalTransaction(stores, input, type, existing = null) {
     claimBatchId,
     claimNote,
     reimbursementExpenseId: null,
+    reimbursementExpenseIds: null,
+    isBatchReimbursement: false,
+    reimbursementBatchNote: null,
     reimbursementTransactionId: type === 'expense' ? existing?.reimbursementTransactionId || null : null,
     sourceAccountId: null,
     sourceAccountNameSnapshot: null,
@@ -250,6 +253,23 @@ function reimbursementDetails(input) {
   return input && typeof input === 'object' ? input : {};
 }
 
+function reimbursementSourceIds(transaction) {
+  const sourceIds = Array.isArray(transaction?.reimbursementExpenseIds)
+    ? transaction.reimbursementExpenseIds
+    : transaction?.reimbursementExpenseId ? [transaction.reimbursementExpenseId] : [];
+  return [...new Set(sourceIds.filter((id) => typeof id === 'string' && id.trim()))];
+}
+
+function reimbursementItemLabel(expense) {
+  const title = expense.note?.trim() || expense.subcategoryNameSnapshot || expense.parentCategoryNameSnapshot || '支出';
+  return `${title}（NT$ ${expense.amount}）`;
+}
+
+function batchReimbursementNote(expenses, note) {
+  const prefix = typeof note === 'string' ? note.trim() : '';
+  return [prefix, `報銷項目：${expenses.map(reimbursementItemLabel).join('、')}`].filter(Boolean).join('\n');
+}
+
 function buildReimbursementTransaction(expense, input = {}, existing = null) {
   const details = reimbursementDetails(input);
   const transaction = transactionBase({
@@ -274,6 +294,47 @@ function buildReimbursementTransaction(expense, input = {}, existing = null) {
     claimBatchId: null,
     claimNote: null,
     reimbursementExpenseId: expense.id,
+    reimbursementExpenseIds: [expense.id],
+    isBatchReimbursement: false,
+    reimbursementBatchNote: null,
+    reimbursementTransactionId: null,
+    sourceAccountId: null,
+    sourceAccountNameSnapshot: null,
+    targetAccountId: null,
+    targetAccountNameSnapshot: null,
+  };
+}
+
+function buildBatchReimbursementTransaction(expenses, note, input = {}, existing = null) {
+  if (!Array.isArray(expenses) || !expenses.length) throw new DataValidationError('請至少選擇一筆未請款支出。');
+  const accountId = expenses[0].accountId;
+  if (expenses.some((expense) => expense.accountId !== accountId)) throw new DataValidationError('合併報銷只能包含同一帳戶的支出，請先用帳戶篩選。');
+  const transaction = transactionBase({
+    id: existing?.id,
+    amount: expenses.reduce((sum, expense) => sum + expense.amount, 0),
+    date: input.date ?? existing?.date,
+    time: input.time ?? existing?.time,
+    note: batchReimbursementNote(expenses, note),
+  }, 'income', existing);
+  const account = expenses[0];
+  return {
+    ...transaction,
+    accountId: account.accountId,
+    accountNameSnapshot: account.accountNameSnapshot,
+    accountIds: [account.accountId],
+    parentCategoryId: null,
+    parentCategoryNameSnapshot: null,
+    subcategoryId: null,
+    subcategoryNameSnapshot: null,
+    isDirectParentExpense: false,
+    isReimbursement: true,
+    isPlannedClaim: false,
+    claimBatchId: null,
+    claimNote: null,
+    reimbursementExpenseId: null,
+    reimbursementExpenseIds: expenses.map((expense) => expense.id),
+    isBatchReimbursement: true,
+    reimbursementBatchNote: typeof note === 'string' ? note.trim() : '',
     reimbursementTransactionId: null,
     sourceAccountId: null,
     sourceAccountNameSnapshot: null,
@@ -305,6 +366,9 @@ async function buildTransferTransaction(stores, input, existing = null) {
     claimBatchId: null,
     claimNote: null,
     reimbursementExpenseId: null,
+    reimbursementExpenseIds: null,
+    isBatchReimbursement: false,
+    reimbursementBatchNote: null,
     reimbursementTransactionId: null,
     sourceAccountId: source.id,
     sourceAccountNameSnapshot: source.name,
@@ -336,6 +400,9 @@ async function buildCsvNormalTransaction(stores, input) {
     claimBatchId: input.type === 'expense' ? claimBatchId : null,
     claimNote: input.type === 'expense' ? claimNote : null,
     reimbursementExpenseId: input.type === 'income' && input.isReimbursement === true ? input.reimbursementExpenseId || null : null,
+    reimbursementExpenseIds: input.type === 'income' && input.isReimbursement === true ? reimbursementSourceIds(input) : null,
+    isBatchReimbursement: input.type === 'income' && input.isBatchReimbursement === true,
+    reimbursementBatchNote: input.type === 'income' && input.isBatchReimbursement === true ? input.reimbursementBatchNote || '' : null,
     reimbursementTransactionId: input.type === 'expense' ? input.reimbursementTransactionId || null : null,
     sourceAccountId: null,
     sourceAccountNameSnapshot: null,
@@ -384,6 +451,9 @@ async function buildCsvTransferTransaction(stores, input) {
     claimBatchId: null,
     claimNote: null,
     reimbursementExpenseId: null,
+    reimbursementExpenseIds: null,
+    isBatchReimbursement: false,
+    reimbursementBatchNote: null,
     reimbursementTransactionId: null,
     sourceAccountId: source.id,
     sourceAccountNameSnapshot: requireText(input.sourceAccountNameSnapshot, 'CSV 來源帳戶名稱'),
@@ -402,6 +472,9 @@ function skippedCsvTransactionStillMatches(record, transaction) {
     && (record.claimBatchId || null) === (transaction.claimBatchId || null)
     && (record.claimNote || null) === (transaction.claimNote || null)
     && (record.reimbursementExpenseId || null) === (transaction.reimbursementExpenseId || null)
+    && JSON.stringify(reimbursementSourceIds(record)) === JSON.stringify(reimbursementSourceIds(transaction))
+    && Boolean(record.isBatchReimbursement) === Boolean(transaction.isBatchReimbursement)
+    && (record.reimbursementBatchNote || null) === (transaction.reimbursementBatchNote || null)
     && (record.reimbursementTransactionId || null) === (transaction.reimbursementTransactionId || null);
   if (!sameBase) return false;
   if (record.type === 'transfer') {
@@ -434,16 +507,28 @@ function skippedCsvTransactionStillMatches(record, transaction) {
 
 async function validateReimbursementLink(stores, transaction) {
   if (transaction.isReimbursement === true) {
-    if (transaction.type !== 'income' || !transaction.reimbursementExpenseId || transaction.reimbursementTransactionId) throw new DataValidationError('CSV 報銷交易關聯錯誤。');
-    const expense = await mustGet(stores.transactions, transaction.reimbursementExpenseId, '報銷原支出');
-    if (expense.type !== 'expense' || expense.isPlannedClaim === true || expense.claimBatchId || expense.claimNote || expense.reimbursementTransactionId !== transaction.id || expense.accountId !== transaction.accountId || expense.date !== transaction.date || expense.time !== transaction.time) {
-      throw new DataValidationError('CSV 報銷與原支出不一致。');
+    const sourceIds = reimbursementSourceIds(transaction);
+    const isBatch = transaction.isBatchReimbursement === true;
+    if (transaction.type !== 'income' || !sourceIds.length || transaction.reimbursementTransactionId || (isBatch && transaction.reimbursementExpenseId)) throw new DataValidationError('CSV 報銷交易關聯錯誤。');
+    const expenses = [];
+    for (const sourceId of sourceIds) {
+      const expense = await mustGet(stores.transactions, sourceId, '報銷原支出');
+      if (expense.type !== 'expense' || expense.isPlannedClaim === true || expense.claimBatchId || expense.claimNote || expense.reimbursementTransactionId !== transaction.id) {
+        throw new DataValidationError('CSV 報銷與原支出不一致。');
+      }
+      if (isBatch ? expense.accountId !== transaction.accountId : expense.accountId !== transaction.accountId || expense.date !== transaction.date || expense.time !== transaction.time) {
+        throw new DataValidationError('CSV 報銷與原支出不一致。');
+      }
+      expenses.push(expense);
+    }
+    if (isBatch && transaction.amount !== expenses.reduce((sum, expense) => sum + expense.amount, 0)) {
+      throw new DataValidationError('CSV 合併報銷金額必須等於原支出合計。');
     }
   }
   if (transaction.reimbursementTransactionId) {
     if (transaction.type !== 'expense' || transaction.isReimbursement === true || transaction.isPlannedClaim === true || transaction.claimBatchId || transaction.claimNote || transaction.reimbursementExpenseId) throw new DataValidationError('CSV 原支出報銷關聯錯誤。');
     const reimbursement = await mustGet(stores.transactions, transaction.reimbursementTransactionId, '報銷交易');
-    if (reimbursement.isReimbursement !== true || reimbursement.reimbursementExpenseId !== transaction.id) throw new DataValidationError('CSV 原支出與報銷交易關聯錯誤。');
+    if (reimbursement.isReimbursement !== true || !reimbursementSourceIds(reimbursement).includes(transaction.id)) throw new DataValidationError('CSV 原支出與報銷交易關聯錯誤。');
   }
 }
 
@@ -630,8 +715,21 @@ export class MeowneyRepository {
       const existingReimbursement = existing.reimbursementTransactionId
         ? await mustGet(stores.transactions, existing.reimbursementTransactionId, '連動報銷')
         : null;
-      if (existingReimbursement && (existingReimbursement.isReimbursement !== true || existingReimbursement.reimbursementExpenseId !== existing.id)) {
+      if (existingReimbursement && (existingReimbursement.isReimbursement !== true || !reimbursementSourceIds(existingReimbursement).includes(existing.id))) {
         throw new DataValidationError('報銷連動資料錯誤，請先備份後再重試。');
+      }
+      if (existingReimbursement?.isBatchReimbursement === true) {
+        if (!enabled) throw new DataValidationError('此支出已包含在合併報銷，請先刪除合併報銷事項。');
+        if (expense.accountId !== existingReimbursement.accountId) throw new DataValidationError('已包含在合併報銷的支出不可變更帳戶。');
+        const linkedExpense = { ...expense, isPlannedClaim: false, claimBatchId: null, claimNote: null, reimbursementTransactionId: existingReimbursement.id };
+        const sources = [];
+        for (const sourceId of reimbursementSourceIds(existingReimbursement)) {
+          sources.push(sourceId === existing.id ? linkedExpense : await mustGet(stores.transactions, sourceId, '合併報銷原支出'));
+        }
+        const updatedReimbursement = buildBatchReimbursementTransaction(sources, existingReimbursement.reimbursementBatchNote || '', { date: existingReimbursement.date, time: existingReimbursement.time }, existingReimbursement);
+        await requestAsPromise(stores.transactions.put(linkedExpense));
+        await requestAsPromise(stores.transactions.put(updatedReimbursement));
+        return { expense: linkedExpense, reimbursement: updatedReimbursement };
       }
       if (!enabled) {
         await requestAsPromise(stores.transactions.put({ ...expense, reimbursementTransactionId: null }));
@@ -649,46 +747,26 @@ export class MeowneyRepository {
     });
   }
 
-  async createClaimBatch(transactionIds, note = '') {
+  async createBatchReimbursement(transactionIds, note = '', date, time) {
     if (!Array.isArray(transactionIds) || !transactionIds.length || new Set(transactionIds).size !== transactionIds.length) {
       throw new DataValidationError('請至少選擇一筆未請款支出。');
     }
-    if (typeof note !== 'string') throw new DataValidationError('請款備註格式錯誤。');
-    const claimBatchId = createId();
-    const claimNote = note.trim();
+    if (typeof note !== 'string') throw new DataValidationError('報銷備註格式錯誤。');
     return this.write(STORE.transactions, async ({ transactions }) => {
       const selected = [];
       for (const id of transactionIds) {
         const transaction = await mustGet(transactions, id, '預計請款支出');
-        if (transaction.type !== 'expense' || transaction.isPlannedClaim !== true || transaction.claimBatchId || transaction.reimbursementTransactionId) {
-          throw new DataValidationError('選取項目已變更，請重新查詢後再建立請款單。');
+        if (transaction.type !== 'expense' || transaction.isPlannedClaim !== true || transaction.reimbursementTransactionId) {
+          throw new DataValidationError('選取項目已變更，請重新查詢後再建立合併報銷。');
         }
         selected.push(transaction);
       }
+      const reimbursement = buildBatchReimbursementTransaction(selected, note, { date, time });
       for (const transaction of selected) {
-        await requestAsPromise(transactions.put({ ...transaction, claimBatchId, claimNote, updatedAt: now() }));
+        await requestAsPromise(transactions.put({ ...transaction, isPlannedClaim: false, claimBatchId: null, claimNote: null, reimbursementTransactionId: reimbursement.id, updatedAt: now() }));
       }
-      return { claimBatchId, claimNote, transactionIds: [...transactionIds] };
-    });
-  }
-
-  async returnClaimBatchItems(transactionIds) {
-    if (!Array.isArray(transactionIds) || !transactionIds.length || new Set(transactionIds).size !== transactionIds.length) {
-      throw new DataValidationError('請至少選擇一筆已請款支出。');
-    }
-    return this.write(STORE.transactions, async ({ transactions }) => {
-      const selected = [];
-      for (const id of transactionIds) {
-        const transaction = await mustGet(transactions, id, '已請款支出');
-        if (transaction.type !== 'expense' || transaction.isPlannedClaim !== true || !transaction.claimBatchId || transaction.reimbursementTransactionId) {
-          throw new DataValidationError('選取項目已變更，請重新查詢後再退回未請款。');
-        }
-        selected.push(transaction);
-      }
-      for (const transaction of selected) {
-        await requestAsPromise(transactions.put({ ...transaction, claimBatchId: null, claimNote: null, updatedAt: now() }));
-      }
-      return selected.map((transaction) => transaction.id);
+      await requestAsPromise(transactions.add(reimbursement));
+      return { reimbursement, transactionIds: [...transactionIds] };
     });
   }
 
@@ -696,6 +774,7 @@ export class MeowneyRepository {
     return this.write(STORE.transactions, async ({ transactions }) => {
       const reimbursement = await mustGet(transactions, id, '報銷交易');
       if (reimbursement.isReimbursement !== true || reimbursement.type !== 'income') throw new DataValidationError('只有報銷項目可以修改報銷金額或備註。');
+      if (reimbursement.isBatchReimbursement === true) throw new DataValidationError('合併報銷的金額與項目由已選支出自動產生，不能直接修改。');
       const expense = await mustGet(transactions, reimbursement.reimbursementExpenseId, '報銷原支出');
       if (expense.type !== 'expense' || expense.reimbursementTransactionId !== reimbursement.id) throw new DataValidationError('報銷連動資料錯誤，請先備份後再重試。');
       const updated = buildReimbursementTransaction(expense, input, reimbursement);
@@ -711,16 +790,30 @@ export class MeowneyRepository {
   async deleteTransaction(id) {
     return this.write(STORE.transactions, async ({ transactions }) => {
       const existing = await mustGet(transactions, id, '交易');
-      if (existing.isReimbursement === true && existing.reimbursementExpenseId) {
-        const expense = await requestAsPromise(transactions.get(existing.reimbursementExpenseId));
-        if (expense?.reimbursementTransactionId === existing.id) {
-          await requestAsPromise(transactions.put({ ...expense, reimbursementTransactionId: null, updatedAt: now() }));
+      if (existing.isReimbursement === true) {
+        for (const sourceId of reimbursementSourceIds(existing)) {
+          const expense = await requestAsPromise(transactions.get(sourceId));
+          if (expense?.reimbursementTransactionId === existing.id) {
+            await requestAsPromise(transactions.put({ ...expense, reimbursementTransactionId: null, updatedAt: now() }));
+          }
         }
       }
       if (existing.reimbursementTransactionId) {
         const reimbursement = await requestAsPromise(transactions.get(existing.reimbursementTransactionId));
-        if (reimbursement?.isReimbursement === true && reimbursement.reimbursementExpenseId === existing.id) {
-          await requestAsPromise(transactions.delete(reimbursement.id));
+        if (reimbursement?.isReimbursement === true && reimbursementSourceIds(reimbursement).includes(existing.id)) {
+          if (reimbursement.isBatchReimbursement === true) {
+            const remainingIds = reimbursementSourceIds(reimbursement).filter((sourceId) => sourceId !== existing.id);
+            if (!remainingIds.length) {
+              await requestAsPromise(transactions.delete(reimbursement.id));
+            } else {
+              const remainingExpenses = [];
+              for (const sourceId of remainingIds) remainingExpenses.push(await mustGet(transactions, sourceId, '合併報銷原支出'));
+              const updatedReimbursement = buildBatchReimbursementTransaction(remainingExpenses, reimbursement.reimbursementBatchNote || '', { date: reimbursement.date, time: reimbursement.time }, reimbursement);
+              await requestAsPromise(transactions.put(updatedReimbursement));
+            }
+          } else {
+            await requestAsPromise(transactions.delete(reimbursement.id));
+          }
         }
       }
       await requestAsPromise(transactions.delete(id));

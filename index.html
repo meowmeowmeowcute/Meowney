@@ -70,7 +70,6 @@
                 <select id="query-claim-status">
                   <option value="all">全部</option>
                   <option value="planned">尚未請款</option>
-                  <option value="submitted">已請款</option>
                 </select>
               </label>
               <label>帳戶
@@ -108,18 +107,11 @@
               <p id="planned-claim-query-count" class="query-detail__count">0 筆</p>
               <div id="planned-claim-query-list" class="query-list"></div>
               <div id="planned-claim-actions" class="claim-actions" hidden>
-                <label class="note-field">請款備註（選填）
-                  <textarea id="claim-note-input" rows="2" placeholder="例如：九月客戶費用、送件日期"></textarea>
+                <p class="query-guidance">會新增一筆合計報銷收入，並在備註列出已選項目；限同一帳戶。</p>
+                <label class="note-field">報銷備註（選填）
+                  <textarea id="claim-note-input" rows="2" placeholder="例如：九月費用報銷"></textarea>
                 </label>
-                <button id="create-claim-batch" class="button button--primary button--full" type="button">建立請款單</button>
-              </div>
-            </section>
-            <section id="submitted-claim-query-details" class="query-detail" hidden>
-              <div class="query-detail__heading"><h3>已請款</h3><strong id="submitted-claim-query-total">NT$ 0</strong></div>
-              <p id="submitted-claim-query-count" class="query-detail__count">0 筆</p>
-              <div id="submitted-claim-query-list" class="query-list"></div>
-              <div id="submitted-claim-actions" class="claim-actions" hidden>
-                <button id="return-claim-batch-items" class="button button--secondary button--full" type="button">退回未請款</button>
+                <button id="create-batch-reimbursement" class="button button--primary button--full" type="button">建立合併報銷</button>
               </div>
             </section>
             <section id="parent-query-details" class="query-detail" hidden>

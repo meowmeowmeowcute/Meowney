@@ -49,16 +49,12 @@ export async function runStage5Tests() {
       assert(combined.count === 0, '預計請款篩選沒有與其他條件取交集。');
     });
 
-    await test('已請款與尚未請款可分別查詢，退回後即回到尚未請款', async () => {
+    await test('合併報銷建立後，原支出不再列入尚未請款', async () => {
       const plannedExpense = transactions.find((transaction) => transaction.note === '早餐');
-      await repository.createClaimBatch([plannedExpense.id], '八月早餐請款');
-      const submittedTransactions = await repository.listTransactions();
-      const pending = runTransactionQuery(submittedTransactions, { claimStatus: 'planned' }, now);
-      const submitted = runTransactionQuery(submittedTransactions, { claimStatus: 'submitted' }, now);
-      assert(pending.count === 0 && submitted.count === 1 && submitted.results[0].claimNote === '八月早餐請款', '請款狀態沒有正確分流。');
-      await repository.returnClaimBatchItems([plannedExpense.id]);
-      const returned = runTransactionQuery(await repository.listTransactions(), { claimStatus: 'planned' }, now);
-      assert(returned.count === 1 && returned.results[0].claimBatchId === null, '退回未請款後查詢結果不正確。');
+      const result = await repository.createBatchReimbursement([plannedExpense.id], '八月早餐報銷', '2026-08-24', '13:00');
+      const reimbursedTransactions = await repository.listTransactions();
+      const pending = runTransactionQuery(reimbursedTransactions, { claimStatus: 'planned' }, now);
+      assert(pending.count === 0 && result.reimbursement.amount === 100 && result.reimbursement.note.includes('早餐') && reimbursedTransactions.some((transaction) => transaction.id === result.reimbursement.id && transaction.type === 'income'), '合併報銷沒有正確建立或解除預計請款。');
     });
 
     await test('今天、本月、特定日期與特定月份的日期邊界正確', async () => {

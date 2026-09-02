@@ -52,11 +52,11 @@ export async function runStage8Tests() {
     assert(app.includes("claimStatus: $('#query-claim-status').value") && app.includes("state.form.isPlannedClaim = !state.form.isPlannedClaim"), '預計請款表單或查詢沒有連接。');
     assert(dataLayer.includes('isPlannedClaim: false, claimBatchId: null, claimNote: null, reimbursementTransactionId: reimbursement.id'), '新增報銷時沒有自動取消預計請款。');
   });
-  await test('請款單可選取建立、依備註分組並逐筆退回未請款', async () => {
+  await test('可由預計請款選取項目建立一筆合併報銷收入', async () => {
     const [app, html, dataLayer] = await Promise.all([read('app.js'), read('index.html'), read('data-layer.js')]);
-    assert(html.includes('id="create-claim-batch"') && html.includes('id="claim-note-input"') && html.includes('id="return-claim-batch-items"'), '請款單建立、備註或退回入口不存在。');
-    assert(app.includes('submittedClaimBatchMarkup') && app.includes('createClaimBatch(transactionIds') && app.includes('returnClaimBatchItems(transactionIds)'), '請款單選取、分組或退回流程沒有連接。');
-    assert(dataLayer.includes('async createClaimBatch') && dataLayer.includes('async returnClaimBatchItems'), '請款單資料操作不存在。');
+    assert(html.includes('id="create-batch-reimbursement"') && html.includes('id="claim-note-input"') && html.includes('會新增一筆合計報銷收入'), '合併報銷的建立、備註或說明入口不存在。');
+    assert(app.includes('createBatchReimbursement(transactionIds') && app.includes('建立合併報銷'), '合併報銷選取與建立流程沒有連接。');
+    assert(dataLayer.includes('async createBatchReimbursement') && dataLayer.includes('buildBatchReimbursementTransaction'), '合併報銷資料操作不存在。');
   });
   await test('交付文件、離線資源與標準測試入口均已存在', async () => {
     for (const file of ['README.md', 'manifest.webmanifest', 'service-worker.js', 'backup-format.js', 'tests/run-node-tests.mjs']) {

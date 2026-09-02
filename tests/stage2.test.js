@@ -66,22 +66,28 @@ export async function runStage2Tests() {
       assert(await repository.getAccountBalance(cash.id) === 615, '其他類別支出沒有正確影響帳戶餘額。');
     });
 
-    await test('請款單可原子標記多筆支出，且可逐筆退回未請款', async () => {
+    await test('多筆預計請款支出可原子建立一筆合併報銷收入', async () => {
       const directExpense = (await repository.listTransactions()).find((transaction) => transaction.note === '零星支出');
-      const secondExpense = await repository.createTransaction({ type: 'expense', amount: 10, accountId: bank.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '待請款車資', isPlannedClaim: true, date: '2026-08-23', time: '12:15' });
+      const secondExpense = await repository.createTransaction({ type: 'expense', amount: 10, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '待請款車資', isPlannedClaim: true, date: '2026-08-23', time: '12:15' });
       const balancesBefore = calculateAccountBalances(await repository.listAccounts(), await repository.listTransactions());
-      const batch = await repository.createClaimBatch([directExpense.id, secondExpense.id], '八月費用請款');
+      const batch = await repository.createBatchReimbursement([directExpense.id, secondExpense.id], '八月費用報銷', '2026-08-24', '09:00');
       const submitted = await repository.listTransactions();
-      assert(submitted.filter((transaction) => transaction.claimBatchId === batch.claimBatchId).length === 2 && submitted.every((transaction) => transaction.claimBatchId !== batch.claimBatchId || transaction.claimNote === '八月費用請款'), '請款單沒有原子標記選取項目或保存備註。');
-      assert(JSON.stringify([...calculateAccountBalances(await repository.listAccounts(), submitted)]) === JSON.stringify([...balancesBefore]), '建立請款單不應改變帳戶餘額。');
-      await repository.returnClaimBatchItems([directExpense.id]);
-      const returned = await repository.listTransactions();
-      const returnedExpense = returned.find((transaction) => transaction.id === directExpense.id);
-      const stillSubmitted = returned.find((transaction) => transaction.id === secondExpense.id);
-      assert(returnedExpense.isPlannedClaim === true && returnedExpense.claimBatchId === null && stillSubmitted.claimBatchId === batch.claimBatchId, '部分退回未請款沒有維持其他請款單項目。');
-      await repository.updateExpenseWithReimbursement(secondExpense.id, {}, { enabled: true, amount: 5, note: '已核銷車資' });
-      const reimbursedSource = (await repository.listTransactions()).find((transaction) => transaction.id === secondExpense.id);
-      assert(reimbursedSource.isPlannedClaim === false && reimbursedSource.claimBatchId === null && reimbursedSource.claimNote === null, '實際報銷後沒有取消請款單與預計請款狀態。');
+      const linkedSources = submitted.filter((transaction) => transaction.reimbursementTransactionId === batch.reimbursement.id);
+      assert(batch.reimbursement.isReimbursement === true && batch.reimbursement.isBatchReimbursement === true && batch.reimbursement.amount === 45 && batch.reimbursement.note.includes('八月費用報銷') && batch.reimbursement.note.includes('零星支出') && batch.reimbursement.note.includes('待請款車資'), '合併報銷沒有建立一筆正確的收入與項目備註。');
+      assert(linkedSources.length === 2 && linkedSources.every((transaction) => transaction.isPlannedClaim === false && transaction.claimBatchId === null && transaction.claimNote === null), '合併報銷沒有原子解除原支出的請款狀態。');
+      const balancesAfter = calculateAccountBalances(await repository.listAccounts(), submitted);
+      assert(balancesAfter.get(cash.id) === balancesBefore.get(cash.id) + 45 && balancesAfter.get(bank.id) === balancesBefore.get(bank.id), '合併報銷沒有只以一筆收入增加正確帳戶餘額。');
+      const cashClaim = await repository.createTransaction({ type: 'expense', amount: 3, accountId: cash.id, parentCategoryId: other.id, note: '現金待報銷', isPlannedClaim: true, date: '2026-08-24', time: '09:10' });
+      const bankClaim = await repository.createTransaction({ type: 'expense', amount: 4, accountId: bank.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '銀行待報銷', isPlannedClaim: true, date: '2026-08-24', time: '09:15' });
+      const beforeMixedAccountAttempt = await repository.listTransactions();
+      await rejects(() => repository.createBatchReimbursement([cashClaim.id, bankClaim.id], '', '2026-08-24', '09:20'), DataValidationError);
+      assert(JSON.stringify(await repository.listTransactions()) === JSON.stringify(beforeMixedAccountAttempt), '不同帳戶的合併報銷失敗後留下了部分資料。');
+      await repository.deleteTransaction(cashClaim.id);
+      await repository.deleteTransaction(bankClaim.id);
+      await repository.deleteTransaction(directExpense.id);
+      const afterSourceDelete = await repository.listTransactions();
+      const reducedBatch = afterSourceDelete.find((transaction) => transaction.id === batch.reimbursement.id);
+      assert(reducedBatch?.amount === 10 && reducedBatch.note.includes('待請款車資') && !reducedBatch.note.includes('零星支出'), '刪除合併報銷中的原支出沒有同步更新報銷事項。');
     });
 
     await test('報銷會以原子方式新增連動收入，且金額可獨立處理', async () => {
@@ -89,7 +95,7 @@ export async function runStage2Tests() {
       const created = await repository.createExpenseWithReimbursement({ type: 'expense', amount: 80, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '客戶午餐', isPlannedClaim: true, date: '2026-08-23', time: '12:30' }, { amount: 30, note: '客戶午餐' });
       assert(created.expense.reimbursementTransactionId === created.reimbursement.id && created.expense.isPlannedClaim === false && created.reimbursement.isReimbursement === true && created.reimbursement.reimbursementExpenseId === created.expense.id, '報銷交易沒有建立雙向連動或取消預計請款。');
       assert(created.reimbursement.type === 'income' && created.reimbursement.amount === 30 && created.reimbursement.note === '客戶午餐', '報銷沒有以獨立金額收入建立或帶入原支出備註。');
-      assert((await repository.listTransactions()).length === beforeCount + 2 && await repository.getAccountBalance(cash.id) === 565, '部分報銷新增後交易數或帳戶淨額錯誤。');
+      assert((await repository.listTransactions()).length === beforeCount + 2 && await repository.getAccountBalance(cash.id) === 600, '部分報銷新增後交易數或帳戶淨額錯誤。');
       await repository.updateExpenseWithReimbursement(created.expense.id, { amount: 95, accountId: bank.id, date: '2026-08-24', time: '09:30' }, { enabled: true, amount: 30, note: '等待入帳' });
       const updated = await repository.listTransactions();
       const updatedExpense = updated.find((transaction) => transaction.id === created.expense.id);

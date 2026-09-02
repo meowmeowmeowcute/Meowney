@@ -36,7 +36,7 @@ export async function runStage7Tests() {
     await source.createTransaction({ type: 'income', amount: 300, accountId: bank.id, note: '餐費補助', date: '2026-08-25', time: '09:00' });
     await source.createTransaction({ type: 'transfer', amount: 80, sourceAccountId: bank.id, targetAccountId: cash.id, note: '轉存', date: '2026-08-25', time: '18:00' });
     const plannedExpense = await source.createTransaction({ type: 'expense', amount: 10, accountId: cash.id, parentCategoryId: other.id, note: '零星支出', isPlannedClaim: true, date: '2026-08-25', time: '19:00' });
-    await source.createClaimBatch([plannedExpense.id], '八月零星費用');
+    await source.createBatchReimbursement([plannedExpense.id], '八月零星費用', '2026-08-26', '08:00');
     await source.createExpenseWithReimbursement({ type: 'expense', amount: 60, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '客戶晚餐', date: '2026-08-25', time: '20:00' }, { amount: 30, note: '已送公司請款' });
     await source.setSetting('initial-parent-categories-created', true);
     const sourceSnapshot = await source.getSnapshot();
@@ -49,7 +49,7 @@ export async function runStage7Tests() {
       const restored = await target.getSnapshot();
       assert(JSON.stringify(restored) === JSON.stringify(sourceSnapshot), '還原後資料與來源備份不一致。');
       const balances = calculateAccountBalances(restored.accounts, restored.transactions);
-      assert(balances.get(cash.id) === 914.5 && balances.get(bank.id) === 720, '還原後帳戶餘額錯誤。');
+      assert(balances.get(cash.id) === 924.5 && balances.get(bank.id) === 720, '還原後帳戶餘額錯誤。');
       const query = runTransactionQuery(restored.transactions, { parentCategoryId: food.id }, '2026-08-25');
       assert(query.expenseTotal === 185.5 && query.incomeTotal === 0, '無類別收入不應被母類別查詢納入。');
     });
@@ -81,8 +81,10 @@ export async function runStage7Tests() {
       const income = sourceSnapshot.transactions.find((transaction) => transaction.type === 'income');
       assert(income.parentCategoryId === null && income.subcategoryId === null, '測試收入應為無類別資料。');
       const directExpense = sourceSnapshot.transactions.find((transaction) => transaction.isDirectParentExpense === true);
-      assert(directExpense?.parentCategoryNameSnapshot === '其他' && directExpense.subcategoryId === null && directExpense.isPlannedClaim === true && directExpense.claimNote === '八月零星費用' && csv.includes('預計請款') && csv.includes('請款單ID'), '其他類別支出或請款單未正確保留在 JSON／CSV 資料中。');
-      const reimbursement = sourceSnapshot.transactions.find((transaction) => transaction.isReimbursement === true);
+      assert(directExpense?.parentCategoryNameSnapshot === '其他' && directExpense.subcategoryId === null && directExpense.isPlannedClaim === false && directExpense.reimbursementTransactionId && csv.includes('合併報銷'), '其他類別支出或合併報銷未正確保留在 JSON／CSV 資料中。');
+      const batchReimbursement = sourceSnapshot.transactions.find((transaction) => transaction.isBatchReimbursement === true);
+      assert(batchReimbursement?.amount === 10 && batchReimbursement.note.includes('八月零星費用') && batchReimbursement.note.includes('零星支出') && batchReimbursement.reimbursementExpenseIds.includes(directExpense.id), 'CSV 未保留合併報銷收入與項目備註。');
+      const reimbursement = sourceSnapshot.transactions.find((transaction) => transaction.isReimbursement === true && transaction.isBatchReimbursement !== true);
       const reimbursementExpense = sourceSnapshot.transactions.find((transaction) => transaction.id === reimbursement?.reimbursementExpenseId);
       assert(reimbursement?.amount === 30 && reimbursement?.note === '已送公司請款' && reimbursementExpense?.amount === 60 && reimbursementExpense?.reimbursementTransactionId === reimbursement.id && csv.includes('報銷支出交易ID'), 'CSV 未保留部分報銷與備註關聯。');
     });
@@ -91,16 +93,16 @@ export async function runStage7Tests() {
       const csv = exportTransactionsCsv(sourceSnapshot.transactions);
       const plan = planCsvImport(csv, await csvTarget.getSnapshot());
       assert(plan.valid, `CSV 匯入計畫錯誤：${plan.error}`);
-      assert(plan.summary.newTransactions === 6 && plan.summary.skippedTransactions === 0 && plan.summary.createdAccounts === 2 && plan.summary.createdParentCategories === 2 && plan.summary.createdSubcategories === 1 && plan.summary.conflictCount === 0, 'CSV 預覽統計錯誤。');
+      assert(plan.summary.newTransactions === 7 && plan.summary.skippedTransactions === 0 && plan.summary.createdAccounts === 2 && plan.summary.createdParentCategories === 2 && plan.summary.createdSubcategories === 1 && plan.summary.conflictCount === 0, 'CSV 預覽統計錯誤。');
       await csvTarget.importCsvPlan(plan.plan);
       const imported = await csvTarget.getSnapshot();
       assert(imported.accounts.length === 2 && imported.accounts.every((account) => account.initialBalance === 0), '缺少帳戶沒有依名稱以初始餘額 0 建立。');
-      assert(imported.parentCategories.length === 2 && imported.subcategories.length === 1 && imported.transactions.length === 6, 'CSV 類別或交易沒有完整匯入。');
+      assert(imported.parentCategories.length === 2 && imported.subcategories.length === 1 && imported.transactions.length === 7, 'CSV 類別或交易沒有完整匯入。');
       assert(imported.transactions.some((transaction) => transaction.isDirectParentExpense === true && transaction.parentCategoryNameSnapshot === '其他'), 'CSV 沒有完整匯入其他類別支出。');
-      assert(imported.transactions.some((transaction) => transaction.isPlannedClaim === true && transaction.claimBatchId && transaction.claimNote === '八月零星費用' && transaction.note === '零星支出'), 'CSV 沒有完整匯入請款單狀態。');
+      assert(imported.transactions.some((transaction) => transaction.isBatchReimbursement === true && transaction.note.includes('八月零星費用') && transaction.reimbursementExpenseIds?.length === 1), 'CSV 沒有完整匯入合併報銷狀態。');
       assert(imported.transactions.some((transaction) => transaction.isReimbursement === true && transaction.note === '已送公司請款'), 'CSV 沒有完整匯入報銷交易。');
       const retry = planCsvImport(csv, imported);
-      assert(retry.valid && retry.summary.newTransactions === 0 && retry.summary.skippedTransactions === 6, '完全相同的既有交易沒有正確跳過。');
+      assert(retry.valid && retry.summary.newTransactions === 0 && retry.summary.skippedTransactions === 7, '完全相同的既有交易沒有正確跳過。');
     });
 
     await test('既有交易內容不同或 CSV 內重複 ID 都會衝突且不寫入', async () => {
@@ -136,7 +138,7 @@ export async function runStage7Tests() {
         const plan = planCsvImport(csv, await nameOnlyTarget.getSnapshot());
         assert(plan.valid && plan.summary.createdAccounts === 2 && plan.summary.createdParentCategories === 2 && plan.summary.createdSubcategories === 1, '名稱式帳戶或類別建立計畫錯誤。');
         await nameOnlyTarget.importCsvPlan(plan.plan);
-        assert((await nameOnlyTarget.getSnapshot()).transactions.length === 6, '名稱式 CSV 匯入失敗。');
+        assert((await nameOnlyTarget.getSnapshot()).transactions.length === 7, '名稱式 CSV 匯入失敗。');
       } finally {
         nameOnlyTarget.close();
         await deleteDatabase(nameOnlyTargetName);
@@ -167,20 +169,21 @@ export async function runStage7Tests() {
       incomeCells[17] = '是';
       const incomeCsv = `${incomeHeader}\r\n${incomeCells.join(',')}\r\n`;
       assert(!validateCsvImport(incomeCsv).valid, '收入的預計請款欄位被錯誤接受。');
-      const reimbursement = sourceSnapshot.transactions.find((transaction) => transaction.isReimbursement === true);
+      const reimbursement = sourceSnapshot.transactions.find((transaction) => transaction.isReimbursement === true && transaction.isBatchReimbursement !== true);
       const expense = sourceSnapshot.transactions.find((transaction) => transaction.id === reimbursement.reimbursementExpenseId);
       const invalidPair = exportTransactionsCsv([{ ...expense, isPlannedClaim: true }, reimbursement]);
       assert(!validateCsvImport(invalidPair).valid, '已報銷原支出的預計請款欄位被錯誤接受。');
     });
 
-    await test('同一請款單的 CSV 與 JSON 備註不一致時會拒絕整批資料', async () => {
+    await test('合併報銷的 CSV 與 JSON 金額不一致時會拒絕整批資料', async () => {
       const directExpense = sourceSnapshot.transactions.find((transaction) => transaction.note === '零星支出');
-      const conflictingExpense = { ...directExpense, id: crypto.randomUUID(), note: '另一筆零星支出', claimNote: '不同備註' };
-      const invalidCsv = exportTransactionsCsv([directExpense, conflictingExpense]);
-      assert(!validateCsvImport(invalidCsv).valid, '請款單備註不一致的 CSV 被錯誤接受。');
+      const batchReimbursement = sourceSnapshot.transactions.find((transaction) => transaction.isBatchReimbursement === true);
+      const invalidReimbursement = { ...batchReimbursement, amount: batchReimbursement.amount + 1 };
+      const invalidCsv = exportTransactionsCsv([directExpense, invalidReimbursement]);
+      assert(!validateCsvImport(invalidCsv).valid, '合併報銷金額不一致的 CSV 被錯誤接受。');
       const invalidBackup = clone(backup);
-      invalidBackup.data.transactions.push(conflictingExpense);
-      assert(!validateBackup(invalidBackup).valid, '請款單備註不一致的 JSON 被錯誤接受。');
+      invalidBackup.data.transactions.find((transaction) => transaction.id === batchReimbursement.id).amount += 1;
+      assert(!validateBackup(invalidBackup).valid, '合併報銷金額不一致的 JSON 被錯誤接受。');
     });
   } finally {
     source?.close();
