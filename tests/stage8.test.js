@@ -58,6 +58,12 @@ export async function runStage8Tests() {
     assert(app.includes('createBatchReimbursement(transactionIds') && app.includes('建立合併報銷'), '合併報銷選取與建立流程沒有連接。');
     assert(dataLayer.includes('async createBatchReimbursement') && dataLayer.includes('buildBatchReimbursementTransaction'), '合併報銷資料操作不存在。');
   });
+  await test('合併請款在列表簡潔顯示，明細會條列已報銷項目', async () => {
+    const [app, html, css] = await Promise.all([read('app.js'), read('index.html'), read('styles.css')]);
+    assert(app.includes("transaction.isBatchReimbursement === true) return '合併請款'") && app.includes('batchReimbursementItemsMarkup(transaction)') && app.includes('batchReimbursementReadOnly ? batchReimbursementItemsMarkup(form)'), '合併請款標題或明細條列流程缺失。');
+    assert(html.includes('id="batch-reimbursement-details"') && html.includes('id="batch-reimbursement-items"'), '合併請款明細容器不存在。');
+    assert(css.includes('.batch-reimbursement-items li') && css.includes("content: '•'"), '合併請款條列視覺樣式缺失。');
+  });
   await test('交付文件、離線資源與標準測試入口均已存在', async () => {
     for (const file of ['README.md', 'manifest.webmanifest', 'service-worker.js', 'backup-format.js', 'tests/run-node-tests.mjs']) {
       await access(new URL(file, root), constants.R_OK);

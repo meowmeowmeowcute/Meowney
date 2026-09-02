@@ -247,6 +247,12 @@
 
         <p id="claim-submitted-info" class="reimbursement-linked-info claim-submitted-info" hidden></p>
 
+        <section id="batch-reimbursement-details" class="batch-reimbursement-details" aria-labelledby="batch-reimbursement-items-title" hidden>
+          <p id="batch-reimbursement-note" class="batch-reimbursement-note" hidden></p>
+          <h3 id="batch-reimbursement-items-title">已報銷項目</h3>
+          <ul id="batch-reimbursement-items" class="batch-reimbursement-items"></ul>
+        </section>
+
         <section id="reimbursement-section" class="entry-section reimbursement-section" aria-labelledby="reimbursement-label" hidden>
           <div class="field-label">
             <h3 id="reimbursement-label">報銷</h3>
@@ -265,7 +271,7 @@
 
         <p id="reimbursement-linked-info" class="reimbursement-linked-info" hidden>此筆報銷與原支出保留關聯；可在這裡獨立修改報銷金額與備註。</p>
 
-        <label class="note-field"><span id="note-field-label">備註（選填）</span>
+        <label id="transaction-note-field" class="note-field"><span id="note-field-label">備註（選填）</span>
           <textarea id="note-input" rows="2" placeholder="例如：午餐、薪水入帳"></textarea>
         </label>
 

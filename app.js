@@ -128,6 +128,7 @@ function renderAccounts() {
 }
 
 function transactionTitle(transaction) {
+  if (transaction.isBatchReimbursement === true) return '合併請款';
   if (transaction.type === 'transfer') return '帳戶轉帳';
   if (usesNoteAsPrimaryTitle(transaction)) return transaction.note;
   if (transaction.isReimbursement === true) return '報銷';
@@ -135,7 +136,7 @@ function transactionTitle(transaction) {
   return transaction.categoryName || transaction.parentName;
 }
 function transactionTitleMarkup(transaction) {
-  const reimbursementLabel = transaction.isReimbursement === true && transaction.note
+  const reimbursementLabel = transaction.isReimbursement === true && transaction.note && transaction.isBatchReimbursement !== true
     ? '<small class="transaction-kind">報銷</small>'
     : '';
   const plannedClaimLabel = transaction.type === 'expense' && transaction.isPlannedClaim === true
@@ -147,6 +148,7 @@ function transactionTitleMarkup(transaction) {
   return `<b class="${titleClass}">${escapeHTML(transactionTitle(transaction))}${reimbursementLabel}${plannedClaimLabel}</b>`;
 }
 function usesNoteAsPrimaryTitle(transaction) {
+  if (transaction.isBatchReimbursement === true) return false;
   return Boolean(transaction.note) && (
     transaction.type === 'income'
     || (transaction.type === 'expense' && transaction.isDirectParentExpense === true && transaction.parentName === DIRECT_EXPENSE_PARENT_CATEGORY_NAME)
@@ -165,7 +167,16 @@ function transactionMeta(transaction) {
 }
 
 function transactionNoteMarkup(transaction) {
-  return transaction.note && !usesNoteAsPrimaryTitle(transaction) ? `<small class="transaction-note">${escapeHTML(transaction.note)}</small>` : '';
+  return transaction.note && !usesNoteAsPrimaryTitle(transaction) && transaction.isBatchReimbursement !== true ? `<small class="transaction-note">${escapeHTML(transaction.note)}</small>` : '';
+}
+
+function batchReimbursementItemsMarkup(transaction) {
+  const sourceIds = Array.isArray(transaction.reimbursementExpenseIds) ? transaction.reimbursementExpenseIds : [];
+  const sources = sourceIds
+    .map((id) => state.transactions.find((item) => item.id === id))
+    .filter(Boolean);
+  if (!sources.length) return '<li class="batch-reimbursement-items__empty">找不到已包含的報銷項目。</li>';
+  return sources.map((source) => `<li><span>${escapeHTML(transactionTitle(source))}</span><strong>${currency(source.amount)}</strong></li>`).join('');
 }
 function queryTransactionRowMarkup(transaction) {
   return `<div class="query-row"><div><b>${escapeHTML(transactionTitle(transaction))}</b><span>${escapeHTML(transaction.date)} · ${escapeHTML(transaction.accountName)} · ${escapeHTML(transaction.time)}</span>${transactionNoteMarkup(transaction)}</div><strong class="${transaction.type}">${transactionAmountText(transaction)}</strong></div>`;
@@ -215,7 +226,7 @@ function renderTransactions() {
     const relativeLabel = relativeDateLabel(date);
     return `<section class="date-group" aria-label="${formatDate(date)}${relativeLabel ? `，${relativeLabel}` : ''}交易">
       <header class="date-group__header"><h3>${formatDate(date)}${relativeLabel ? `<small>${relativeLabel}</small>` : ''}</h3><strong class="${net > 0 ? 'positive' : net < 0 ? 'negative' : ''}">${net === 0 ? currency(0) : signedCurrency(net)}</strong></header>
-      ${records.map((transaction) => `<button class="transaction-row" type="button" data-edit-id="${transaction.id}" aria-label="編輯 ${escapeHTML(transactionTitle(transaction))} ${transactionAmountText(transaction)}${transaction.note ? `，備註 ${escapeHTML(transaction.note)}` : ''}">
+      ${records.map((transaction) => `<button class="transaction-row" type="button" data-edit-id="${transaction.id}" aria-label="編輯 ${escapeHTML(transactionTitle(transaction))} ${transactionAmountText(transaction)}${transaction.isBatchReimbursement === true ? '，查看已報銷項目' : transaction.note ? `，備註 ${escapeHTML(transaction.note)}` : ''}">
         <span class="transaction-icon" aria-hidden="true">${transactionIcon(transaction)}</span>
         <span class="transaction-details">${transactionTitleMarkup(transaction)}<span>${escapeHTML(transactionMeta(transaction))}</span>${transactionNoteMarkup(transaction)}</span>
         <strong class="transaction-amount ${transaction.type}">${transactionAmountText(transaction)}</strong>
@@ -242,7 +253,7 @@ function renderSettings() {
 }
 
 function createBlankForm() {
-  return { id: null, type: 'expense', amountText: '', accountId: null, parentId: null, categoryId: null, sourceAccountId: null, targetAccountId: null, note: '', isPlannedClaim: false, reimbursementEnabled: false, reimbursementAmountText: '', reimbursementAmountTouched: false, reimbursementNote: '', reimbursementNoteTouched: false, isReimbursement: false, isBatchReimbursement: false, date: todayValue(), time: timeValue(), dateTimeExpanded: false };
+  return { id: null, type: 'expense', amountText: '', accountId: null, parentId: null, categoryId: null, sourceAccountId: null, targetAccountId: null, note: '', isPlannedClaim: false, reimbursementEnabled: false, reimbursementAmountText: '', reimbursementAmountTouched: false, reimbursementNote: '', reimbursementNoteTouched: false, isReimbursement: false, isBatchReimbursement: false, reimbursementExpenseIds: [], reimbursementBatchNote: '', date: todayValue(), time: timeValue(), dateTimeExpanded: false };
 }
 
 function formFromTransaction(transaction) {
@@ -267,6 +278,8 @@ function formFromTransaction(transaction) {
     reimbursementNoteTouched: Boolean(reimbursement),
     isReimbursement: transaction.isReimbursement === true,
     isBatchReimbursement: transaction.isBatchReimbursement === true || reimbursement?.isBatchReimbursement === true,
+    reimbursementExpenseIds: Array.isArray(transaction.reimbursementExpenseIds) ? transaction.reimbursementExpenseIds : [],
+    reimbursementBatchNote: transaction.reimbursementBatchNote || '',
     date: transaction.date,
     time: transaction.time,
     dateTimeExpanded: false,
@@ -280,8 +293,9 @@ function openSheet(editingId = null) {
   state.editingId = editingId;
   const transaction = editingId ? state.transactions.find((item) => item.id === editingId) : null;
   state.form = transaction ? formFromTransaction(transaction) : createBlankForm();
-  $('#sheet-kicker').textContent = transaction ? '編輯交易' : '快速新增';
-  $('#sheet-title').textContent = transaction ? '修改這筆交易' : '記一筆交易';
+  const batchReimbursement = transaction?.isBatchReimbursement === true;
+  $('#sheet-kicker').textContent = batchReimbursement ? '合併請款明細' : transaction ? '編輯交易' : '快速新增';
+  $('#sheet-title').textContent = batchReimbursement ? '合併請款' : transaction ? '修改這筆交易' : '記一筆交易';
   $('#delete-transaction').hidden = !transaction;
   $('#form-error').hidden = true;
   $('#sheet-overlay').hidden = false;
@@ -322,7 +336,11 @@ function renderSheet() {
   $('#claim-submitted-info').hidden = !batchReimbursementSource && !batchReimbursementReadOnly;
   $('#claim-submitted-info').textContent = batchReimbursementSource
     ? '此筆已包含在合併報銷中；修改金額或備註後，合併報銷的金額與項目清單會同步更新。'
-    : batchReimbursementReadOnly ? '此筆為合併報銷收入；金額與項目清單由已包含的支出自動產生。' : '';
+    : batchReimbursementReadOnly ? '此筆合併請款的金額由以下項目自動合計。' : '';
+  $('#batch-reimbursement-details').hidden = !batchReimbursementReadOnly;
+  $('#batch-reimbursement-note').hidden = !batchReimbursementReadOnly || !form.reimbursementBatchNote;
+  $('#batch-reimbursement-note').textContent = form.reimbursementBatchNote ? `共用備註：${form.reimbursementBatchNote}` : '';
+  $('#batch-reimbursement-items').innerHTML = batchReimbursementReadOnly ? batchReimbursementItemsMarkup(form) : '';
   $('#reimbursement-section').hidden = form.type !== 'expense' || reimbursementReadOnly || batchReimbursementSource;
   $('#planned-claim-toggle').setAttribute('aria-pressed', String(form.isPlannedClaim));
   $('#planned-claim-toggle').classList.toggle('reimbursement-toggle--active', form.isPlannedClaim);
@@ -336,6 +354,7 @@ function renderSheet() {
   $('#reimbursement-note-field').hidden = !form.reimbursementEnabled || form.type !== 'expense' || reimbursementReadOnly;
   $('#reimbursement-note-input').value = form.reimbursementNote;
   $('#note-field-label').textContent = reimbursementReadOnly ? '報銷備註（選填）' : '備註（選填）';
+  $('#transaction-note-field').hidden = batchReimbursementReadOnly;
   $('#note-input').value = form.note;
   $('#note-input').disabled = batchReimbursementReadOnly;
   $('#date-input').value = form.date;
