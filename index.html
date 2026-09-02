@@ -66,6 +66,12 @@
                   <option value="income">僅收入</option>
                 </select>
               </label>
+              <label>請款狀態
+                <select id="query-claim-status">
+                  <option value="all">全部</option>
+                  <option value="planned">尚未請款</option>
+                </select>
+              </label>
               <label>帳戶
                 <select id="query-account"><option value="all">所有帳戶</option></select>
               </label>
@@ -96,6 +102,11 @@
               <article><span>符合筆數</span><strong id="query-count">0</strong></article>
             </div>
             <p id="query-guidance" class="query-guidance">選擇母類別或子類別後，可查看已篩選的類別統計。</p>
+            <section id="planned-claim-query-details" class="query-detail" hidden>
+              <div class="query-detail__heading"><h3>尚未請款</h3><strong id="planned-claim-query-total">NT$ 0</strong></div>
+              <p id="planned-claim-query-count" class="query-detail__count">0 筆</p>
+              <div id="planned-claim-query-list" class="query-list"></div>
+            </section>
             <section id="parent-query-details" class="query-detail" hidden>
               <div class="query-detail__heading"><h3 id="parent-query-title">母類別支出</h3><strong id="parent-query-total">NT$ 0</strong></div>
               <div id="parent-query-list" class="query-list"></div>
@@ -215,6 +226,16 @@
           <div id="source-account-options" class="chip-row"></div>
           <h3>目的帳戶 <em>必填</em></h3>
           <div id="target-account-options" class="chip-row"></div>
+        </section>
+
+        <section id="planned-claim-section" class="entry-section reimbursement-section planned-claim-section" aria-labelledby="planned-claim-label" hidden>
+          <div class="field-label">
+            <h3 id="planned-claim-label">請款狀態</h3>
+            <span>報銷後自動取消</span>
+          </div>
+          <button id="planned-claim-toggle" class="reimbursement-toggle" type="button" aria-pressed="false">
+            <span><b>預計請款</b><small id="planned-claim-toggle-status">報銷後會自動取消這個標記</small></span><i aria-hidden="true">＋</i>
+          </button>
         </section>
 
         <section id="reimbursement-section" class="entry-section reimbursement-section" aria-labelledby="reimbursement-label" hidden>

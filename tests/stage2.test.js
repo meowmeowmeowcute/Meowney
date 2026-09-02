@@ -61,15 +61,15 @@ export async function runStage2Tests() {
 
     await test('其他類別可直接新增支出，其他支出仍必須選擇子類別', async () => {
       await rejects(() => repository.createTransaction({ type: 'expense', amount: 10, accountId: bank.id, parentCategoryId: food.id, date: '2026-08-23', time: '11:30' }), DataValidationError);
-      const directExpense = await repository.createTransaction({ type: 'expense', amount: 35, accountId: cash.id, parentCategoryId: other.id, note: '零星支出', date: '2026-08-23', time: '12:00' });
-      assert(other.allowsDirectExpense === true && directExpense.isDirectParentExpense === true && directExpense.parentCategoryNameSnapshot === '其他' && directExpense.subcategoryId === null, '其他類別沒有正確建立免子類別支出。');
+      const directExpense = await repository.createTransaction({ type: 'expense', amount: 35, accountId: cash.id, parentCategoryId: other.id, note: '零星支出', isPlannedClaim: true, date: '2026-08-23', time: '12:00' });
+      assert(other.allowsDirectExpense === true && directExpense.isDirectParentExpense === true && directExpense.isPlannedClaim === true && directExpense.parentCategoryNameSnapshot === '其他' && directExpense.subcategoryId === null, '其他類別沒有正確建立免子類別或預計請款支出。');
       assert(await repository.getAccountBalance(cash.id) === 615, '其他類別支出沒有正確影響帳戶餘額。');
     });
 
     await test('報銷會以原子方式新增連動收入，且金額可獨立處理', async () => {
       const beforeCount = (await repository.listTransactions()).length;
-      const created = await repository.createExpenseWithReimbursement({ type: 'expense', amount: 80, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '客戶午餐', date: '2026-08-23', time: '12:30' }, { amount: 30, note: '客戶午餐' });
-      assert(created.expense.reimbursementTransactionId === created.reimbursement.id && created.reimbursement.isReimbursement === true && created.reimbursement.reimbursementExpenseId === created.expense.id, '報銷交易沒有建立雙向連動。');
+      const created = await repository.createExpenseWithReimbursement({ type: 'expense', amount: 80, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '客戶午餐', isPlannedClaim: true, date: '2026-08-23', time: '12:30' }, { amount: 30, note: '客戶午餐' });
+      assert(created.expense.reimbursementTransactionId === created.reimbursement.id && created.expense.isPlannedClaim === false && created.reimbursement.isReimbursement === true && created.reimbursement.reimbursementExpenseId === created.expense.id, '報銷交易沒有建立雙向連動或取消預計請款。');
       assert(created.reimbursement.type === 'income' && created.reimbursement.amount === 30 && created.reimbursement.note === '客戶午餐', '報銷沒有以獨立金額收入建立或帶入原支出備註。');
       assert((await repository.listTransactions()).length === beforeCount + 2 && await repository.getAccountBalance(cash.id) === 565, '部分報銷新增後交易數或帳戶淨額錯誤。');
       await repository.updateExpenseWithReimbursement(created.expense.id, { amount: 95, accountId: bank.id, date: '2026-08-24', time: '09:30' }, { enabled: true, amount: 30, note: '等待入帳' });

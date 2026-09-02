@@ -64,8 +64,9 @@ h3 em { color: var(--muted); font-size: 12px; font-style: normal; font-weight: 5
 .transaction-details { min-width: 0; flex: 1; }
 .transaction-details b, .transaction-details span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .transaction-details b { font-size: 16px; letter-spacing: -.02em; }
-.transaction-details b.transaction-title--note { overflow: visible; text-overflow: clip; white-space: pre-wrap; line-height: 1.35; overflow-wrap: anywhere; }
-.transaction-title--note .transaction-kind { display: inline; margin-left: 7px; color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: 0; white-space: nowrap; }
+.transaction-details b.transaction-title--note, .transaction-details b.transaction-title--with-kind { overflow: visible; text-overflow: clip; white-space: pre-wrap; line-height: 1.35; overflow-wrap: anywhere; }
+.transaction-title--note .transaction-kind, .transaction-title--with-kind .transaction-kind { display: inline; margin-left: 7px; color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: 0; white-space: nowrap; }
+.transaction-kind--planned { color: #e8bd6a !important; }
 .transaction-details span { margin-top: 3px; color: var(--muted); font-size: 11px; }
 .transaction-note { display: block; margin-top: 4px; color: #c7d0cc; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; white-space: pre-wrap; }
 .transaction-amount { align-self: center; font-size: 17px; font-weight: 800; letter-spacing: -.02em; white-space: nowrap; }
@@ -86,7 +87,7 @@ h3 em { color: var(--muted); font-size: 12px; font-style: normal; font-weight: 5
 .filter-card h2, .query-results h2, .settings-group h2 { margin-bottom: 14px; }
 .filter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
 .filter-grid label, .date-time-fields label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
-.filter-grid label:nth-child(8), .filter-grid label:nth-child(9), .filter-grid label:nth-child(10) { grid-column: span 2; }
+.filter-grid label:nth-child(9), .filter-grid label:nth-child(10), .filter-grid label:nth-child(11) { grid-column: span 2; }
 input, select, textarea { width: 100%; border: 1px solid var(--line); border-radius: 11px; background: #111416; color: var(--text); }
 input, select { min-height: 42px; padding: 0 10px; }
 textarea { padding: 11px; resize: vertical; }
@@ -180,6 +181,9 @@ textarea { padding: 11px; resize: vertical; }
 .chip:disabled { opacity: .36; cursor: not-allowed; }
 .note-field { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
 .reimbursement-section { padding: 13px; border: 1px solid #334840; border-radius: 15px; background: linear-gradient(135deg, rgba(29, 61, 49, .56), rgba(29, 35, 36, .72)); }
+.planned-claim-section { border-color: #5d4b2b; background: linear-gradient(135deg, rgba(76, 57, 24, .54), rgba(31, 35, 34, .72)); }
+.planned-claim-section .reimbursement-toggle--active { border-color: #e8bd6a; background: #4a3a1d; }
+.planned-claim-section .reimbursement-toggle--active i { border-color: #e8bd6a; background: #e8bd6a; color: #261d0d; }
 .reimbursement-section .field-label { margin-bottom: 8px; }
 .reimbursement-toggle { display: flex; width: 100%; min-height: 54px; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid #3d4948; border-radius: 12px; background: #232a2a; color: var(--text); text-align: left; }
 .reimbursement-toggle span { display: grid; gap: 3px; }

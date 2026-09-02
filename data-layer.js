@@ -191,6 +191,9 @@ async function buildNormalTransaction(stores, input, type, existing = null) {
   const account = await mustGet(stores.accounts, accountId, '帳戶');
   const parentCategoryId = input.parentCategoryId ?? existing?.parentCategoryId ?? null;
   const subcategoryId = input.subcategoryId ?? existing?.subcategoryId ?? null;
+  const isPlannedClaim = input.isPlannedClaim ?? existing?.isPlannedClaim ?? false;
+  if (typeof isPlannedClaim !== 'boolean') throw new DataValidationError('預計請款設定格式錯誤。');
+  if (type !== 'expense' && isPlannedClaim) throw new DataValidationError('只有支出可標記預計請款。');
   const requiresCategory = type === 'expense' || parentCategoryId || subcategoryId;
   const transaction = {
     ...transactionBase(input, type, existing),
@@ -203,6 +206,7 @@ async function buildNormalTransaction(stores, input, type, existing = null) {
     subcategoryNameSnapshot: null,
     isDirectParentExpense: false,
     isReimbursement: false,
+    isPlannedClaim: type === 'expense' && isPlannedClaim,
     reimbursementExpenseId: null,
     reimbursementTransactionId: type === 'expense' ? existing?.reimbursementTransactionId || null : null,
     sourceAccountId: null,
@@ -261,6 +265,7 @@ function buildReimbursementTransaction(expense, input = {}, existing = null) {
     subcategoryNameSnapshot: null,
     isDirectParentExpense: false,
     isReimbursement: true,
+    isPlannedClaim: false,
     reimbursementExpenseId: expense.id,
     reimbursementTransactionId: null,
     sourceAccountId: null,
@@ -289,6 +294,7 @@ async function buildTransferTransaction(stores, input, existing = null) {
     subcategoryNameSnapshot: null,
     isDirectParentExpense: false,
     isReimbursement: false,
+    isPlannedClaim: false,
     reimbursementExpenseId: null,
     reimbursementTransactionId: null,
     sourceAccountId: source.id,
@@ -300,6 +306,8 @@ async function buildTransferTransaction(stores, input, existing = null) {
 
 async function buildCsvNormalTransaction(stores, input) {
   const account = await mustGet(stores.accounts, input.accountId, 'CSV 帳戶');
+  if (input.isPlannedClaim !== undefined && typeof input.isPlannedClaim !== 'boolean') throw new DataValidationError('CSV 預計請款設定格式錯誤。');
+  if (input.type !== 'expense' && input.isPlannedClaim === true) throw new DataValidationError('只有支出可標記預計請款。');
   const hasCategory = input.type === 'expense' || input.parentCategoryId || input.subcategoryId || input.parentCategoryNameSnapshot || input.subcategoryNameSnapshot;
   const transaction = {
     ...transactionBase(input, input.type),
@@ -312,6 +320,7 @@ async function buildCsvNormalTransaction(stores, input) {
     subcategoryNameSnapshot: null,
     isDirectParentExpense: false,
     isReimbursement: input.type === 'income' && input.isReimbursement === true,
+    isPlannedClaim: input.type === 'expense' && input.isPlannedClaim === true,
     reimbursementExpenseId: input.type === 'income' && input.isReimbursement === true ? input.reimbursementExpenseId || null : null,
     reimbursementTransactionId: input.type === 'expense' ? input.reimbursementTransactionId || null : null,
     sourceAccountId: null,
@@ -357,6 +366,7 @@ async function buildCsvTransferTransaction(stores, input) {
     subcategoryNameSnapshot: null,
     isDirectParentExpense: false,
     isReimbursement: false,
+    isPlannedClaim: false,
     reimbursementExpenseId: null,
     reimbursementTransactionId: null,
     sourceAccountId: source.id,
@@ -372,6 +382,7 @@ function skippedCsvTransactionStillMatches(record, transaction) {
     && record.date === transaction.date
     && record.time === transaction.time
     && record.note === (transaction.note || '')
+    && record.isPlannedClaim === (transaction.isPlannedClaim === true)
     && (record.reimbursementExpenseId || null) === (transaction.reimbursementExpenseId || null)
     && (record.reimbursementTransactionId || null) === (transaction.reimbursementTransactionId || null);
   if (!sameBase) return false;
@@ -407,12 +418,12 @@ async function validateReimbursementLink(stores, transaction) {
   if (transaction.isReimbursement === true) {
     if (transaction.type !== 'income' || !transaction.reimbursementExpenseId || transaction.reimbursementTransactionId) throw new DataValidationError('CSV 報銷交易關聯錯誤。');
     const expense = await mustGet(stores.transactions, transaction.reimbursementExpenseId, '報銷原支出');
-    if (expense.type !== 'expense' || expense.reimbursementTransactionId !== transaction.id || expense.accountId !== transaction.accountId || expense.date !== transaction.date || expense.time !== transaction.time) {
+    if (expense.type !== 'expense' || expense.isPlannedClaim === true || expense.reimbursementTransactionId !== transaction.id || expense.accountId !== transaction.accountId || expense.date !== transaction.date || expense.time !== transaction.time) {
       throw new DataValidationError('CSV 報銷與原支出不一致。');
     }
   }
   if (transaction.reimbursementTransactionId) {
-    if (transaction.type !== 'expense' || transaction.isReimbursement === true || transaction.reimbursementExpenseId) throw new DataValidationError('CSV 原支出報銷關聯錯誤。');
+    if (transaction.type !== 'expense' || transaction.isReimbursement === true || transaction.isPlannedClaim === true || transaction.reimbursementExpenseId) throw new DataValidationError('CSV 原支出報銷關聯錯誤。');
     const reimbursement = await mustGet(stores.transactions, transaction.reimbursementTransactionId, '報銷交易');
     if (reimbursement.isReimbursement !== true || reimbursement.reimbursementExpenseId !== transaction.id) throw new DataValidationError('CSV 原支出與報銷交易關聯錯誤。');
   }
@@ -571,7 +582,7 @@ export class MeowneyRepository {
         amount: details.amount === undefined ? expense.amount : details.amount,
         note: details.note === undefined ? expense.note : details.note,
       });
-      const linkedExpense = { ...expense, reimbursementTransactionId: reimbursement.id };
+      const linkedExpense = { ...expense, isPlannedClaim: false, reimbursementTransactionId: reimbursement.id };
       await requestAsPromise(stores.transactions.add(linkedExpense));
       await requestAsPromise(stores.transactions.add(reimbursement));
       return { expense: linkedExpense, reimbursement };
@@ -613,7 +624,7 @@ export class MeowneyRepository {
         amount: amount === undefined ? existingReimbursement?.amount ?? expense.amount : amount,
         note: note === undefined ? existingReimbursement?.note ?? expense.note : note,
       }, existingReimbursement);
-      const linkedExpense = { ...expense, reimbursementTransactionId: reimbursement.id };
+      const linkedExpense = { ...expense, isPlannedClaim: false, reimbursementTransactionId: reimbursement.id };
       await requestAsPromise(stores.transactions.put(linkedExpense));
       await requestAsPromise(stores.transactions.put(reimbursement));
       return { expense: linkedExpense, reimbursement };

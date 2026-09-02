@@ -1,5 +1,6 @@
 const DATE_MODES = new Set(['all', 'today', 'month', 'date', 'specific-month']);
 const TYPE_VALUES = new Set(['all', 'expense', 'income']);
+const CLAIM_STATUS_VALUES = new Set(['all', 'planned']);
 
 function localDateValue(value = new Date()) {
   if (typeof value === 'string') return value;
@@ -30,6 +31,7 @@ function amountValue(value, label) {
 export function normalizeQueryFilters(rawFilters = {}, now = new Date()) {
   const dateMode = DATE_MODES.has(rawFilters.dateMode) ? rawFilters.dateMode : 'all';
   const type = TYPE_VALUES.has(rawFilters.type) ? rawFilters.type : 'all';
+  const claimStatus = CLAIM_STATUS_VALUES.has(rawFilters.claimStatus) ? rawFilters.claimStatus : 'all';
   const min = amountValue(rawFilters.minAmount, '最小金額');
   const max = amountValue(rawFilters.maxAmount, '最大金額');
   if (min.error || max.error) return { error: min.error || max.error };
@@ -54,6 +56,7 @@ export function normalizeQueryFilters(rawFilters = {}, now = new Date()) {
       dateMode,
       dateRange,
       type,
+      claimStatus,
       accountId: selectedValue(rawFilters.accountId),
       parentCategoryId: selectedValue(rawFilters.parentCategoryId),
       subcategoryId: selectedValue(rawFilters.subcategoryId),
@@ -67,6 +70,7 @@ export function normalizeQueryFilters(rawFilters = {}, now = new Date()) {
 export function matchesQuery(transaction, filters) {
   if (transaction.type === 'transfer') return false;
   if (filters.type !== 'all' && transaction.type !== filters.type) return false;
+  if (filters.claimStatus === 'planned' && (transaction.type !== 'expense' || transaction.isPlannedClaim !== true)) return false;
   if (filters.accountId && transaction.accountId !== filters.accountId) return false;
   if (filters.parentCategoryId && transaction.parentCategoryId !== filters.parentCategoryId) return false;
   if (filters.subcategoryId && transaction.subcategoryId !== filters.subcategoryId) return false;

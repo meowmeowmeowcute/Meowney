@@ -22,7 +22,7 @@ export async function runStage5Tests() {
     const coffee = await repository.createSubcategory({ parentCategoryId: food.id, name: '咖啡' });
     const daily = await repository.createSubcategory({ parentCategoryId: shopping.id, name: '日用品' });
     const normal = [
-      { type: 'expense', amount: 100, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '早餐', date: '2026-08-24', time: '08:00' },
+      { type: 'expense', amount: 100, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '早餐', isPlannedClaim: true, date: '2026-08-24', time: '08:00' },
       { type: 'income', amount: 300, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '餐費補助', date: '2026-08-24', time: '12:00' },
       { type: 'expense', amount: 80, accountId: bank.id, parentCategoryId: food.id, subcategoryId: coffee.id, note: '咖啡豆', date: '2026-08-01', time: '09:00' },
       { type: 'expense', amount: 40, accountId: cash.id, parentCategoryId: shopping.id, subcategoryId: daily.id, note: '牙刷', date: '2026-07-31', time: '18:00' },
@@ -40,6 +40,13 @@ export async function runStage5Tests() {
         parentCategoryId: food.id, subcategoryId: meal.id, note: '早餐', minAmount: 100, maxAmount: 100,
       }, now);
       assert(!query.error && query.count === 1 && query.results[0].note === '早餐', '七類條件交集結果不正確。');
+    });
+
+    await test('尚未請款條件只列出已標記且未連動報銷的支出', async () => {
+      const query = runTransactionQuery(transactions, { claimStatus: 'planned' }, now);
+      assert(query.count === 1 && query.expenseTotal === 100 && query.results[0].note === '早餐', '預計請款篩選結果不正確。');
+      const combined = runTransactionQuery(transactions, { claimStatus: 'planned', type: 'income' }, now);
+      assert(combined.count === 0, '預計請款篩選沒有與其他條件取交集。');
     });
 
     await test('今天、本月、特定日期與特定月份的日期邊界正確', async () => {

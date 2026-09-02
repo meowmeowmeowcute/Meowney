@@ -136,7 +136,13 @@ function transactionTitleMarkup(transaction) {
   const reimbursementLabel = transaction.isReimbursement === true && transaction.note
     ? '<small class="transaction-kind">報銷</small>'
     : '';
-  return `<b class="${usesNoteAsPrimaryTitle(transaction) ? 'transaction-title--note' : ''}">${escapeHTML(transactionTitle(transaction))}${reimbursementLabel}</b>`;
+  const plannedClaimLabel = transaction.type === 'expense' && transaction.isPlannedClaim === true
+    ? '<small class="transaction-kind transaction-kind--planned">預計請款</small>'
+    : '';
+  const titleClass = usesNoteAsPrimaryTitle(transaction)
+    ? 'transaction-title--note'
+    : plannedClaimLabel ? 'transaction-title--with-kind' : '';
+  return `<b class="${titleClass}">${escapeHTML(transactionTitle(transaction))}${reimbursementLabel}${plannedClaimLabel}</b>`;
 }
 function usesNoteAsPrimaryTitle(transaction) {
   return Boolean(transaction.note) && (
@@ -158,6 +164,9 @@ function transactionMeta(transaction) {
 
 function transactionNoteMarkup(transaction) {
   return transaction.note && !usesNoteAsPrimaryTitle(transaction) ? `<small class="transaction-note">${escapeHTML(transaction.note)}</small>` : '';
+}
+function queryTransactionRowMarkup(transaction) {
+  return `<div class="query-row"><div><b>${escapeHTML(transactionTitle(transaction))}</b><span>${escapeHTML(transaction.date)} · ${escapeHTML(transaction.accountName)} · ${escapeHTML(transaction.time)}</span>${transactionNoteMarkup(transaction)}</div><strong class="${transaction.type}">${transactionAmountText(transaction)}</strong></div>`;
 }
 
 function renderTransactions() {
@@ -206,7 +215,7 @@ function renderSettings() {
 }
 
 function createBlankForm() {
-  return { id: null, type: 'expense', amountText: '', accountId: null, parentId: null, categoryId: null, sourceAccountId: null, targetAccountId: null, note: '', reimbursementEnabled: false, reimbursementAmountText: '', reimbursementAmountTouched: false, reimbursementNote: '', reimbursementNoteTouched: false, isReimbursement: false, date: todayValue(), time: timeValue(), dateTimeExpanded: false };
+  return { id: null, type: 'expense', amountText: '', accountId: null, parentId: null, categoryId: null, sourceAccountId: null, targetAccountId: null, note: '', isPlannedClaim: false, reimbursementEnabled: false, reimbursementAmountText: '', reimbursementAmountTouched: false, reimbursementNote: '', reimbursementNoteTouched: false, isReimbursement: false, date: todayValue(), time: timeValue(), dateTimeExpanded: false };
 }
 
 function formFromTransaction(transaction) {
@@ -221,6 +230,7 @@ function formFromTransaction(transaction) {
     sourceAccountId: transaction.sourceAccountId || null,
     targetAccountId: transaction.targetAccountId || null,
     note: transaction.note || '',
+    isPlannedClaim: transaction.isPlannedClaim === true,
     reimbursementEnabled: Boolean(reimbursement),
     reimbursementAmountText: reimbursement ? String(reimbursement.amount) : '',
     reimbursementAmountTouched: Boolean(reimbursement),
@@ -276,7 +286,11 @@ function renderSheet() {
   $('#category-section').hidden = form.type !== 'expense';
   $('#single-account-section').hidden = form.type === 'transfer' || reimbursementReadOnly;
   $('#transfer-account-section').hidden = form.type !== 'transfer';
+  $('#planned-claim-section').hidden = form.type !== 'expense' || reimbursementReadOnly;
   $('#reimbursement-section').hidden = form.type !== 'expense' || reimbursementReadOnly;
+  $('#planned-claim-toggle').setAttribute('aria-pressed', String(form.isPlannedClaim));
+  $('#planned-claim-toggle').classList.toggle('reimbursement-toggle--active', form.isPlannedClaim);
+  $('#planned-claim-toggle-status').textContent = form.isPlannedClaim ? '可在查詢中查看尚未請款的支出' : '報銷後會自動取消這個標記';
   $('#reimbursement-linked-info').hidden = !reimbursementReadOnly;
   $('#reimbursement-toggle').setAttribute('aria-pressed', String(form.reimbursementEnabled));
   $('#reimbursement-toggle').classList.toggle('reimbursement-toggle--active', form.reimbursementEnabled);
@@ -346,7 +360,7 @@ function transactionInputFromForm() {
     return { type: form.type, amount: Number(form.amountText), sourceAccountId: form.sourceAccountId, targetAccountId: form.targetAccountId, note: form.note.trim(), date: form.date, time: form.time };
   }
   const input = { type: form.type, amount: Number(form.amountText), accountId: form.accountId, note: form.note.trim(), date: form.date, time: form.time };
-  return form.type === 'expense' ? { ...input, parentCategoryId: form.parentId, subcategoryId: form.categoryId } : input;
+  return form.type === 'expense' ? { ...input, parentCategoryId: form.parentId, subcategoryId: form.categoryId, isPlannedClaim: form.isPlannedClaim } : input;
 }
 
 async function saveTransaction() {
@@ -439,6 +453,7 @@ function renderQuery() {
     specificDate: $('#query-specific-date').value,
     specificMonth: $('#query-specific-month').value,
     type: $('#query-type').value,
+    claimStatus: $('#query-claim-status').value,
     accountId: $('#query-account').value,
     parentCategoryId: $('#query-parent').value,
     subcategoryId: $('#query-category').value,
@@ -455,9 +470,11 @@ function renderQuery() {
   const categoryId = $('#query-category').value;
   const hasParent = parentId !== 'all';
   const hasCategory = categoryId !== 'all';
+  const hasPlannedClaims = $('#query-claim-status').value === 'planned';
   $('#parent-query-details').hidden = !hasParent || Boolean(query.error);
   $('#subcategory-query-details').hidden = !hasCategory || Boolean(query.error);
-  $('#query-guidance').hidden = hasParent || hasCategory || Boolean(query.error);
+  $('#planned-claim-query-details').hidden = !hasPlannedClaims || hasCategory || Boolean(query.error);
+  $('#query-guidance').hidden = hasParent || hasCategory || hasPlannedClaims || Boolean(query.error);
   if (hasParent && !query.error) {
     const breakdown = parentCategoryBreakdown(query.results, parentId);
     const parentName = $('#query-parent').selectedOptions[0]?.textContent.replace('（已刪除）', '') || '母類別';
@@ -474,8 +491,15 @@ function renderQuery() {
     $('#subcategory-query-total').textContent = currency(summary.totalExpense);
     $('#subcategory-query-count').textContent = `${summary.count} 筆`;
     $('#query-list').innerHTML = summary.transactions.length
-      ? summary.transactions.map((transaction) => `<div class="query-row"><div><b>${escapeHTML(transaction.categoryName)}</b><span>${escapeHTML(transaction.date)} · ${escapeHTML(transaction.accountName)} · ${escapeHTML(transaction.time)}</span>${transactionNoteMarkup(transaction)}</div><strong class="${transaction.type}">${transactionAmountText(transaction)}</strong></div>`).join('')
+      ? summary.transactions.map(queryTransactionRowMarkup).join('')
       : '<div class="empty-state">沒有符合條件的交易。</div>';
+  }
+  if (hasPlannedClaims && !hasCategory && !query.error) {
+    $('#planned-claim-query-total').textContent = currency(query.expenseTotal);
+    $('#planned-claim-query-count').textContent = `${query.count} 筆`;
+    $('#planned-claim-query-list').innerHTML = query.results.length
+      ? query.results.map(queryTransactionRowMarkup).join('')
+      : '<div class="empty-state">沒有尚未請款的支出。</div>';
   }
 }
 
@@ -686,6 +710,11 @@ function initialiseEvents() {
     state.form.reimbursementEnabled = enabling;
     if (enabling && !state.form.reimbursementAmountTouched) state.form.reimbursementAmountText = state.form.amountText;
     if (enabling && !state.form.reimbursementNoteTouched) state.form.reimbursementNote = state.form.note;
+    renderSheet();
+  });
+  $('#planned-claim-toggle').addEventListener('click', () => {
+    if (!state.form || state.form.type !== 'expense' || state.form.isReimbursement) return;
+    state.form.isPlannedClaim = !state.form.isPlannedClaim;
     renderSheet();
   });
   $('#reimbursement-amount-input').addEventListener('input', (event) => {

@@ -35,7 +35,7 @@ export async function runStage8Tests() {
     assert(app.includes("selectedParent()?.allowsDirectExpense"), '其他類別沒有正確略過子類別驗證。');
     assert(app.includes('transactionNoteMarkup(transaction)'), '交易紀錄未輸出備註。');
     assert(html.includes('id="category-guidance"'), '其他類別缺少免子類別提示。');
-    assert(app.includes("return form.type === 'expense' ? { ...input, parentCategoryId: form.parentId, subcategoryId: form.categoryId } : input;"), '收入表單仍送出類別關聯。');
+    assert(app.includes("return form.type === 'expense' ? { ...input, parentCategoryId: form.parentId, subcategoryId: form.categoryId, isPlannedClaim: form.isPlannedClaim } : input;"), '收入表單仍送出類別關聯。');
     assert(/\.amount-section\s*\{[^}]*position:\s*sticky/.test(css) && /\.transaction-note\s*\{[^}]*white-space:\s*pre-wrap/.test(css), '金額區或完整備註顯示樣式缺失。');
   });
   await test('報銷、備註優先與日期層級符合交易介面規則', async () => {
@@ -45,6 +45,12 @@ export async function runStage8Tests() {
     assert(app.includes('transactionTitleMarkup(transaction)') && app.includes('class="transaction-kind"') && css.includes('.transaction-kind'), '報銷備註後的灰色標示缺失。');
     assert(html.includes('id="reimbursement-toggle"') && html.includes('id="reimbursement-amount-input"') && html.includes('id="reimbursement-note-input"'), '報銷操作、金額或備註欄位不存在。');
     assert(/\.transaction-row\s*\{[^}]*min-height:\s*74px/.test(css) && css.includes('.transaction-title--note') && css.includes('.date-group__header h3 small'), '交易列密度、備註或日期視覺階級未更新。');
+  });
+  await test('預計請款可查詢，且報銷會取消原支出的狀態', async () => {
+    const [app, html, dataLayer] = await Promise.all([read('app.js'), read('index.html'), read('data-layer.js')]);
+    assert(html.includes('id="planned-claim-toggle"') && html.includes('id="query-claim-status"') && html.includes('id="planned-claim-query-list"'), '預計請款切換或查詢結果入口不存在。');
+    assert(app.includes("claimStatus: $('#query-claim-status').value") && app.includes("state.form.isPlannedClaim = !state.form.isPlannedClaim"), '預計請款表單或查詢沒有連接。');
+    assert(dataLayer.includes('isPlannedClaim: false, reimbursementTransactionId: reimbursement.id'), '新增報銷時沒有自動取消預計請款。');
   });
   await test('交付文件、離線資源與標準測試入口均已存在', async () => {
     for (const file of ['README.md', 'manifest.webmanifest', 'service-worker.js', 'backup-format.js', 'tests/run-node-tests.mjs']) {
