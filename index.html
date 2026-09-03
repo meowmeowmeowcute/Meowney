@@ -214,6 +214,13 @@
           <output id="amount-display" class="amount-display">NT$ 0</output>
         </section>
 
+        <div class="number-pad" aria-label="螢幕數字鍵盤">
+          <button type="button" data-key="1">1</button><button type="button" data-key="2">2</button><button type="button" data-key="3">3</button>
+          <button type="button" data-key="4">4</button><button type="button" data-key="5">5</button><button type="button" data-key="6">6</button>
+          <button type="button" data-key="7">7</button><button type="button" data-key="8">8</button><button type="button" data-key="9">9</button>
+          <button type="button" data-key=".">.</button><button type="button" data-key="0">0</button><button type="button" data-key="backspace" aria-label="刪除一個數字">⌫</button>
+        </div>
+
         <section id="category-section" class="entry-section category-section" aria-labelledby="parent-category-label">
           <div class="field-label">
             <h3 id="parent-category-label">選擇類別 <em>必填</em></h3>
@@ -283,16 +290,10 @@
 
         <p id="form-error" class="form-error" role="alert" hidden></p>
 
-        <div class="number-pad" aria-label="螢幕數字鍵盤">
-          <button type="button" data-key="1">1</button><button type="button" data-key="2">2</button><button type="button" data-key="3">3</button>
-          <button type="button" data-key="4">4</button><button type="button" data-key="5">5</button><button type="button" data-key="6">6</button>
-          <button type="button" data-key="7">7</button><button type="button" data-key="8">8</button><button type="button" data-key="9">9</button>
-          <button type="button" data-key=".">.</button><button type="button" data-key="0">0</button><button type="button" data-key="backspace" aria-label="刪除一個數字">⌫</button>
-        </div>
-        <div class="sheet-actions">
-          <button id="delete-transaction" class="button button--danger" type="button" hidden>刪除</button>
-          <button id="save-transaction" class="button button--primary" type="button">確定</button>
-        </div>
+      </div>
+      <div class="sheet-actions">
+        <button id="delete-transaction" class="button button--danger" type="button" hidden>刪除</button>
+        <button id="save-transaction" class="button button--primary" type="button">確定</button>
       </div>
     </section>
 

@@ -15,6 +15,7 @@ const state = {
   csvImportText: null,
   claimSelection: new Set(),
   claimSelectionStatus: null,
+  transactionDefaults: {},
 };
 
 const DEFAULT_PARENT_CATEGORIES = ['購物', '吃喝', '交通', '娛樂', '生活', DIRECT_EXPENSE_PARENT_CATEGORY_NAME];
@@ -111,7 +112,8 @@ async function ensureInitialParentCategories() {
 
 function renderAccounts() {
   if (!state.accounts.length) {
-    $('#account-list').innerHTML = '<div class="empty-state">尚無帳戶。請前往設定建立帳戶。</div>';
+    $('#account-list').innerHTML = '<div class="empty-state"><p>尚無帳戶，請先建立帳戶才能開始記帳。</p><button class="button button--primary" type="button" data-open-account-setup>建立第一個帳戶</button></div>';
+    $('[data-open-account-setup]').addEventListener('click', openAccountSetup);
     return;
   }
   $('#account-list').innerHTML = state.accounts.map((account) => {
@@ -252,8 +254,51 @@ function renderSettings() {
   bindManagerActions();
 }
 
+function validAccountId(id) { return state.accounts.some((account) => account.id === id) ? id : null; }
+
+function validExpenseCategory(parentId, categoryId) {
+  const parent = state.categories.find((item) => item.id === parentId);
+  if (!parent) return { parentId: null, categoryId: null };
+  if (parent.allowsDirectExpense) return { parentId, categoryId: null };
+  return parent.children.some((child) => child.id === categoryId) ? { parentId, categoryId } : { parentId, categoryId: null };
+}
+
+function applyTypeDefaults(form, type) {
+  const saved = state.transactionDefaults[type] || {};
+  const preferredAccountId = validAccountId(state.selectedAccountId) || validAccountId(saved.accountId) || (state.accounts.length === 1 ? state.accounts[0].id : null);
+  form.type = type;
+  if (type === 'transfer') {
+    form.accountId = null;
+    form.parentId = null;
+    form.categoryId = null;
+    form.sourceAccountId = validAccountId(saved.sourceAccountId);
+    form.targetAccountId = validAccountId(saved.targetAccountId);
+    if (form.sourceAccountId === form.targetAccountId) form.targetAccountId = null;
+  } else {
+    form.accountId = preferredAccountId;
+    form.sourceAccountId = null;
+    form.targetAccountId = null;
+    if (type === 'expense') Object.assign(form, validExpenseCategory(saved.parentId, saved.categoryId));
+    else {
+      form.parentId = null;
+      form.categoryId = null;
+    }
+  }
+  return form;
+}
+
 function createBlankForm() {
-  return { id: null, type: 'expense', amountText: '', accountId: null, parentId: null, categoryId: null, sourceAccountId: null, targetAccountId: null, note: '', isPlannedClaim: false, reimbursementEnabled: false, reimbursementAmountText: '', reimbursementAmountTouched: false, reimbursementNote: '', reimbursementNoteTouched: false, isReimbursement: false, isBatchReimbursement: false, reimbursementExpenseIds: [], reimbursementBatchNote: '', date: todayValue(), time: timeValue(), dateTimeExpanded: false };
+  const form = { id: null, type: 'expense', amountText: '', accountId: null, parentId: null, categoryId: null, sourceAccountId: null, targetAccountId: null, note: '', isPlannedClaim: false, reimbursementEnabled: false, reimbursementAmountText: '', reimbursementAmountTouched: false, reimbursementNote: '', reimbursementNoteTouched: false, isReimbursement: false, isBatchReimbursement: false, reimbursementExpenseIds: [], reimbursementBatchNote: '', date: todayValue(), time: timeValue(), dateTimeExpanded: false };
+  return applyTypeDefaults(form, 'expense');
+}
+
+async function rememberTransactionDefaults(form) {
+  const defaults = { ...state.transactionDefaults };
+  defaults[form.type] = form.type === 'transfer'
+    ? { sourceAccountId: form.sourceAccountId, targetAccountId: form.targetAccountId }
+    : { accountId: form.accountId, ...(form.type === 'expense' ? { parentId: form.parentId, categoryId: form.categoryId } : {}) };
+  state.transactionDefaults = defaults;
+  await state.repository.setSetting('transaction-defaults', defaults);
 }
 
 function formFromTransaction(transaction) {
@@ -288,7 +333,9 @@ function formFromTransaction(transaction) {
 
 function selectedParent() { return state.categories.find((parent) => parent.id === state.form?.parentId); }
 
-function openSheet(editingId = null) {
+function openSheet(editingId = null, { updateHistory = true } = {}) {
+  if (!editingId && !state.accounts.length) return openAccountSetup();
+  if (updateHistory) history.pushState({ meowney: true, page: state.activePage, view: 'sheet', editingId }, '');
   state.sheetOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   state.editingId = editingId;
   const transaction = editingId ? state.transactions.find((item) => item.id === editingId) : null;
@@ -306,7 +353,7 @@ function openSheet(editingId = null) {
   setTimeout(() => $('#close-sheet').focus(), 0);
 }
 
-function closeSheet() {
+function closeSheet({ updateHistory = true } = {}) {
   const opener = state.sheetOpener;
   $('#transaction-sheet').hidden = true;
   $('#sheet-overlay').hidden = true;
@@ -316,6 +363,7 @@ function closeSheet() {
   state.form = null;
   state.sheetOpener = null;
   if (opener?.isConnected) setTimeout(() => opener.focus(), 0);
+  if (updateHistory && history.state?.meowney === true && history.state.view === 'sheet') history.back();
 }
 
 function renderSheet() {
@@ -397,18 +445,18 @@ function appendAmount(key) {
 
 function validationError() {
   const form = state.form;
-  if (form.isReimbursement && form.isBatchReimbursement) return '合併報銷的金額與項目清單由已包含的支出自動產生。';
-  if (!Number.isFinite(Number(form.amountText)) || Number(form.amountText) <= 0) return '請輸入大於 0 的金額。';
-  if (form.type === 'expense' && form.reimbursementEnabled && (!Number.isFinite(Number(form.reimbursementAmountText)) || Number(form.reimbursementAmountText) <= 0)) return '請輸入大於 0 的報銷金額。';
-  if (!form.date || !form.time) return '請選擇完整的日期與時間。';
+  if (form.isReimbursement && form.isBatchReimbursement) return { message: '合併報銷的金額與項目清單由已包含的支出自動產生。', selector: '#batch-reimbursement-details' };
+  if (!Number.isFinite(Number(form.amountText)) || Number(form.amountText) <= 0) return { message: '請輸入大於 0 的金額。', selector: '.number-pad', focusSelector: '.number-pad button' };
+  if (form.type === 'expense' && form.reimbursementEnabled && (!Number.isFinite(Number(form.reimbursementAmountText)) || Number(form.reimbursementAmountText) <= 0)) return { message: '請輸入大於 0 的報銷金額。', selector: '#reimbursement-amount-field', focusSelector: '#reimbursement-amount-input' };
+  if (!form.date || !form.time) return { message: '請選擇完整的日期與時間。', selector: '#toggle-date-time', focusSelector: '#toggle-date-time' };
   if (form.type === 'transfer') {
-    if (!form.sourceAccountId || !form.targetAccountId) return '請選擇來源帳戶與目的帳戶。';
-    if (form.sourceAccountId === form.targetAccountId) return '轉帳的來源與目的帳戶不可相同。';
+    if (!form.sourceAccountId || !form.targetAccountId) return { message: '請選擇來源帳戶與目的帳戶。', selector: '#transfer-account-section', focusSelector: '#transfer-account-section button:not([disabled])' };
+    if (form.sourceAccountId === form.targetAccountId) return { message: '轉帳的來源與目的帳戶不可相同。', selector: '#transfer-account-section', focusSelector: '#transfer-account-section button:not([disabled])' };
     return null;
   }
-  if (!form.accountId) return '請選擇帳戶。';
-  if (form.type === 'expense' && !form.parentId) return '請選擇母類別。';
-  if (form.type === 'expense' && !selectedParent()?.allowsDirectExpense && !form.categoryId) return '請選擇子類別。';
+  if (!form.accountId) return { message: '請選擇帳戶。', selector: '#single-account-section', focusSelector: '#account-options button' };
+  if (form.type === 'expense' && !form.parentId) return { message: '請選擇母類別。', selector: '#category-section', focusSelector: '#parent-options button' };
+  if (form.type === 'expense' && !selectedParent()?.allowsDirectExpense && !form.categoryId) return { message: '請選擇子類別。', selector: '#category-section', focusSelector: '#category-options button' };
   return null;
 }
 
@@ -423,7 +471,7 @@ function transactionInputFromForm() {
 
 async function saveTransaction() {
   const error = validationError();
-  if (error) return showFormError(error);
+  if (error) return showFormError(error.message, error);
   try {
     const input = transactionInputFromForm();
     const createdWithReimbursement = !state.editingId && state.form.type === 'expense' && state.form.reimbursementEnabled;
@@ -432,6 +480,7 @@ async function saveTransaction() {
     else if (state.editingId) await state.repository.updateTransaction(state.editingId, input);
     else if (state.form.type === 'expense' && state.form.reimbursementEnabled) await state.repository.createExpenseWithReimbursement(input, { amount: Number(state.form.reimbursementAmountText), note: state.form.reimbursementNote.trim() });
     else await state.repository.createTransaction(input);
+    await rememberTransactionDefaults(state.form);
     const edited = Boolean(state.editingId);
     await loadData();
     closeSheet();
@@ -442,24 +491,42 @@ async function saveTransaction() {
   }
 }
 
-function showFormError(message) {
+function showFormError(message, target = null) {
   $('#form-error').textContent = message;
   $('#form-error').hidden = false;
+  $$('.validation-target--invalid').forEach((element) => element.classList.remove('validation-target--invalid'));
+  if (!target?.selector) return;
+  const element = $(target.selector);
+  element?.classList.add('validation-target--invalid');
+  element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const focusTarget = target.focusSelector ? $(target.focusSelector) : null;
+  if (focusTarget instanceof HTMLElement) setTimeout(() => focusTarget.focus(), 220);
 }
 
-function showDeleteConfirm() { $('#confirm-dialog').hidden = false; $('#cancel-delete').focus(); }
-function closeDeleteConfirm() { $('#confirm-dialog').hidden = true; $('#delete-transaction').focus(); }
+function showDeleteConfirm({ updateHistory = true } = {}) {
+  if (updateHistory) history.pushState({ meowney: true, page: state.activePage, view: 'confirm', editingId: state.editingId }, '');
+  $('#confirm-dialog').hidden = false;
+  $('#cancel-delete').focus();
+}
+function closeDeleteConfirm({ updateHistory = true } = {}) {
+  $('#confirm-dialog').hidden = true;
+  $('#delete-transaction').focus();
+  if (updateHistory && history.state?.meowney === true && history.state.view === 'confirm') history.back();
+}
 async function deleteTransaction() {
   try {
     await state.repository.deleteTransaction(state.editingId);
     await loadData();
-    closeSheet();
+    const wasConfirmHistory = history.state?.meowney === true && history.state.view === 'confirm';
+    closeSheet({ updateHistory: false });
     render();
     showToast('已刪除交易。');
+    if (wasConfirmHistory) history.go(-2);
   } catch (error) { showFormError(error.message || '刪除交易時發生問題，請重試。'); }
 }
 
-function setPage(page) {
+function setPage(page, { updateHistory = true, scrollToTop = true } = {}) {
+  if (updateHistory && page !== state.activePage) history.pushState({ meowney: true, page, view: 'page' }, '');
   state.activePage = page;
   ['records', 'query', 'settings'].forEach((name) => {
     const current = name === page;
@@ -472,7 +539,24 @@ function setPage(page) {
     if (active) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
   });
   $('#add-transaction').hidden = page !== 'records';
+  if (scrollToTop) window.scrollTo({ top: 0, behavior: 'auto' });
   $('#app').focus();
+}
+
+function openAccountSetup() {
+  setPage('settings');
+  showAccountForm();
+  showToast('請先建立帳戶，再開始記帳。');
+}
+
+function restoreHistoryView(historyState) {
+  if (!historyState?.meowney) return;
+  setPage(historyState.page || 'records', { updateHistory: false, scrollToTop: false });
+  if (historyState.view === 'sheet' || historyState.view === 'confirm') {
+    if ($('#transaction-sheet').hidden || state.editingId !== historyState.editingId) openSheet(historyState.editingId || null, { updateHistory: false });
+    if (historyState.view === 'confirm') showDeleteConfirm({ updateHistory: false });
+    else $('#confirm-dialog').hidden = true;
+  } else if (!$('#transaction-sheet').hidden) closeSheet({ updateHistory: false });
 }
 
 function refreshQueryOptions() {
@@ -700,7 +784,7 @@ function showAccountForm(account = null) {
   hideManagerForms();
   $('#account-form-id').value = account?.id || '';
   $('#account-name-input').value = account?.name || '';
-  $('#account-balance-input').value = account?.initialBalance ?? '';
+  $('#account-balance-input').value = account?.initialBalance ?? '0';
   $('#account-form').hidden = false;
   $('#account-name-input').focus();
 }
@@ -775,7 +859,7 @@ function initialiseEvents() {
   $('#add-transaction').addEventListener('click', () => openSheet());
   $('#close-sheet').addEventListener('click', closeSheet);
   $('#sheet-overlay').addEventListener('click', closeSheet);
-  $$('.type-switch__item').forEach((button) => button.addEventListener('click', () => { if (!state.form?.id) { state.form.type = button.dataset.type; $('#form-error').hidden = true; renderSheet(); } }));
+  $$('.type-switch__item').forEach((button) => button.addEventListener('click', () => { if (!state.form?.id) { applyTypeDefaults(state.form, button.dataset.type); $('#form-error').hidden = true; renderSheet(); } }));
   $$('.number-pad button').forEach((button) => button.addEventListener('click', () => appendAmount(button.dataset.key)));
   $('#note-input').addEventListener('input', (event) => {
     state.form.note = event.target.value;
@@ -874,6 +958,7 @@ function initialiseEvents() {
       else trapFocus(event, $('#transaction-sheet'));
     }
   });
+  window.addEventListener('popstate', (event) => restoreHistoryView(event.state));
 }
 
 async function initialiseApp() {
@@ -881,12 +966,15 @@ async function initialiseApp() {
     state.repository = await MeowneyRepository.open();
     await ensureInitialParentCategories();
     await loadData();
+    const savedDefaults = await state.repository.getSetting('transaction-defaults');
+    state.transactionDefaults = savedDefaults && typeof savedDefaults === 'object' ? savedDefaults : {};
     render();
   } catch (error) {
     $('#transaction-list').innerHTML = `<div class="empty-state">無法開啟本機資料：${escapeHTML(error.message || '請重新整理後再試。')}</div>`;
   }
 }
 
+history.replaceState({ meowney: true, page: state.activePage, view: 'page' }, '');
 initialiseEvents();
 await initialiseApp();
 

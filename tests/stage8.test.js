@@ -64,6 +64,16 @@ export async function runStage8Tests() {
     assert(html.includes('id="batch-reimbursement-details"') && html.includes('id="batch-reimbursement-items"'), '合併請款明細容器不存在。');
     assert(css.includes('.batch-reimbursement-items li') && css.includes("content: '•'"), '合併請款條列視覺樣式缺失。');
   });
+  await test('高頻記帳、首次使用、驗證與返回流程已完成便利性改善', async () => {
+    const [app, html, css, requirements, uxNotes] = await Promise.all([read('app.js'), read('index.html'), read('styles.css'), read('PROJECT_REQUIREMENTS.md'), read('UX_IMPROVEMENTS.md')]);
+    assert(html.indexOf('class="number-pad"') < html.indexOf('id="category-section"'), '數字鍵盤未移到高頻欄位前方。');
+    assert(/\.sheet-actions\s*\{[^}]*flex:\s*0 0 auto/.test(css) && html.indexOf('class="sheet-actions"') > html.indexOf('id="form-error"'), '交易確認操作未與可捲動內容分離。');
+    assert(app.includes("setSetting('transaction-defaults'") && app.includes('validExpenseCategory') && app.includes('state.selectedAccountId'), '帳戶或類別預設沒有安全保存與驗證。');
+    assert(app.includes('data-open-account-setup') && app.includes("account?.initialBalance ?? '0'"), '首次使用入口或初始餘額預設不存在。');
+    assert(app.includes("scrollIntoView({ behavior: 'smooth', block: 'center' })") && css.includes('.validation-target--invalid'), '驗證錯誤沒有定位與標示缺漏欄位。');
+    assert(app.includes("history.pushState({ meowney: true") && app.includes("window.addEventListener('popstate'") && app.includes('restoreHistoryView'), '應用內返回層級未建立。');
+    assert(requirements.includes('操作便利性改善確認') && uxNotes.includes('尚未實作，等待後續決定'), '便利性規格或追蹤文件未更新。');
+  });
   await test('交付文件、離線資源與標準測試入口均已存在', async () => {
     for (const file of ['README.md', 'manifest.webmanifest', 'service-worker.js', 'backup-format.js', 'tests/run-node-tests.mjs']) {
       await access(new URL(file, root), constants.R_OK);
