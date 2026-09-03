@@ -74,6 +74,12 @@ export async function runStage8Tests() {
     assert(html.includes('id="batch-reimbursement-details"') && html.includes('id="batch-reimbursement-items"'), '合併請款明細容器不存在。');
     assert(css.includes('.batch-reimbursement-items li') && css.includes("content: '•'"), '合併請款條列視覺樣式缺失。');
   });
+  await test('已完成的合併報銷可一鍵取消並恢復原始待請款項目', async () => {
+    const [app, html, dataLayer] = await Promise.all([read('app.js'), read('index.html'), read('data-layer.js')]);
+    assert(app.includes("batchReimbursement ? '取消合併報銷' : '刪除'") && html.includes('id="confirm-message"'), '合併報銷明細缺少明確的取消入口或影響說明。');
+    assert(app.includes('確認取消合併') && app.includes('原始支出已恢復為預計請款'), '取消確認或完成提示不完整。');
+    assert(dataLayer.includes("restorePlannedClaim ? { isPlannedClaim: true, claimBatchId: null, claimNote: null }"), '取消合併報銷沒有在資料層恢復預計請款狀態。');
+  });
   await test('高頻記帳、首次使用、驗證與返回流程已完成便利性改善', async () => {
     const [app, html, css, requirements, uxNotes] = await Promise.all([read('app.js'), read('index.html'), read('styles.css'), read('PROJECT_REQUIREMENTS.md'), read('UX_IMPROVEMENTS.md')]);
     assert(html.indexOf('class="number-pad"') < html.indexOf('id="category-section"'), '數字鍵盤未移到高頻欄位前方。');

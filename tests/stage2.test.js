@@ -91,6 +91,11 @@ export async function runStage2Tests() {
       const afterSourceDelete = await repository.listTransactions();
       const reducedBatch = afterSourceDelete.find((transaction) => transaction.id === batch.reimbursement.id);
       assert(reducedBatch?.amount === 10 && reducedBatch.note.includes('待請款車資') && !reducedBatch.note.includes('零星支出'), '刪除合併報銷中的原支出沒有同步更新報銷事項。');
+      await repository.deleteTransaction(batch.reimbursement.id);
+      const afterBatchCancellation = await repository.listTransactions();
+      const restoredExpense = afterBatchCancellation.find((transaction) => transaction.id === secondExpense.id);
+      assert(!afterBatchCancellation.some((transaction) => transaction.id === batch.reimbursement.id) && restoredExpense?.isPlannedClaim === true && restoredExpense.reimbursementTransactionId === null, '取消合併報銷沒有刪除收入並恢復原支出的預計請款狀態。');
+      await repository.createBatchReimbursement([secondExpense.id], '恢復後續測試基準', '2026-08-24', '09:25');
     });
 
     await test('報銷會以原子方式新增連動收入，且金額可獨立處理', async () => {

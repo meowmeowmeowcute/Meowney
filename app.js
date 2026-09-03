@@ -392,6 +392,7 @@ function openSheet(editingId = null, { updateHistory = true } = {}) {
   $('#sheet-kicker').textContent = batchReimbursement ? '合併請款明細' : transaction ? '編輯交易' : '快速新增';
   $('#sheet-title').textContent = batchReimbursement ? '合併請款' : transaction ? '修改這筆交易' : '記一筆交易';
   $('#delete-transaction').hidden = !transaction;
+  $('#delete-transaction').textContent = batchReimbursement ? '取消合併報銷' : '刪除';
   $('#form-error').hidden = true;
   $('#sheet-overlay').hidden = false;
   $('#transaction-sheet').hidden = false;
@@ -553,6 +554,13 @@ function showFormError(message, target = null) {
 
 function showDeleteConfirm({ updateHistory = true } = {}) {
   if (updateHistory) history.pushState({ meowney: true, page: state.activePage, view: 'confirm', editingId: state.editingId }, '');
+  const cancellingBatch = state.form?.isReimbursement === true && state.form?.isBatchReimbursement === true;
+  const sourceCount = state.form?.reimbursementExpenseIds?.length || 0;
+  $('#confirm-title').textContent = cancellingBatch ? '取消這筆合併報銷？' : '刪除這筆交易？';
+  $('#confirm-message').textContent = cancellingBatch
+    ? `將刪除這筆報銷收入，並把 ${sourceCount} 筆原始支出恢復為預計請款。`
+    : '刪除後無法復原。';
+  $('#confirm-delete').textContent = cancellingBatch ? '確認取消合併' : '確認刪除';
   $('#confirm-dialog').hidden = false;
   $('#cancel-delete').focus();
 }
@@ -563,12 +571,13 @@ function closeDeleteConfirm({ updateHistory = true } = {}) {
 }
 async function deleteTransaction() {
   try {
+    const cancelledBatch = state.form?.isReimbursement === true && state.form?.isBatchReimbursement === true;
     await state.repository.deleteTransaction(state.editingId);
     await loadData();
     const wasConfirmHistory = history.state?.meowney === true && history.state.view === 'confirm';
     closeSheet({ updateHistory: false });
     render();
-    showToast('已刪除交易。');
+    showToast(cancelledBatch ? '已取消合併報銷，原始支出已恢復為預計請款。' : '已刪除交易。');
     if (wasConfirmHistory) history.go(-2);
   } catch (error) { showFormError(error.message || '刪除交易時發生問題，請重試。'); }
 }

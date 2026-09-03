@@ -791,10 +791,16 @@ export class MeowneyRepository {
     return this.write(STORE.transactions, async ({ transactions }) => {
       const existing = await mustGet(transactions, id, '交易');
       if (existing.isReimbursement === true) {
+        const restorePlannedClaim = existing.isBatchReimbursement === true;
         for (const sourceId of reimbursementSourceIds(existing)) {
           const expense = await requestAsPromise(transactions.get(sourceId));
           if (expense?.reimbursementTransactionId === existing.id) {
-            await requestAsPromise(transactions.put({ ...expense, reimbursementTransactionId: null, updatedAt: now() }));
+            await requestAsPromise(transactions.put({
+              ...expense,
+              reimbursementTransactionId: null,
+              ...(restorePlannedClaim ? { isPlannedClaim: true, claimBatchId: null, claimNote: null } : {}),
+              updatedAt: now(),
+            }));
           }
         }
       }
