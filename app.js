@@ -1,5 +1,5 @@
 import { DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js';
-import { parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js';
+import { isExcludedFromIncomeExpense, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js';
 import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js';
 
 const state = {
@@ -84,6 +84,7 @@ function isTransactionInSelectedAccount(transaction) {
 }
 
 function getTransactionNet(transaction) {
+  if (isExcludedFromIncomeExpense(transaction)) return 0;
   if (transaction.type === 'income') return transaction.amount;
   if (transaction.type === 'expense') return -transaction.amount;
   return 0;

@@ -80,6 +80,13 @@ export async function runStage8Tests() {
     assert(app.includes('確認取消合併') && app.includes('原始支出已恢復為預計請款'), '取消確認或完成提示不完整。');
     assert(dataLayer.includes("restorePlannedClaim ? { isPlannedClaim: true, claimBatchId: null, claimNote: null }"), '取消合併報銷沒有在資料層恢復預計請款狀態。');
   });
+  await test('報銷整組保留交易但不列入收入與支出統計', async () => {
+    const [app, html, queryLogic, requirements] = await Promise.all([read('app.js'), read('index.html'), read('query-logic.js'), read('PROJECT_REQUIREMENTS.md')]);
+    assert(queryLogic.includes('isExcludedFromIncomeExpense(transaction)') && queryLogic.includes('const countedResults = results.filter'), '報銷整組沒有從收支總額排除。');
+    assert(queryLogic.includes('parentCategoryId !== parentCategoryId || isExcludedFromIncomeExpense(transaction)') && queryLogic.includes('subcategoryId === subcategoryId && !isExcludedFromIncomeExpense(transaction)'), '報銷原支出沒有從類別統計排除。');
+    assert(app.includes('if (isExcludedFromIncomeExpense(transaction)) return 0;'), '交易紀錄的日期淨額仍計入報銷整組。');
+    assert(html.includes('收支統計不包含報銷收入及其原始支出') && requirements.includes('報銷統計口徑'), '介面說明或需求紀錄缺少報銷統計口徑。');
+  });
   await test('高頻記帳、首次使用、驗證與返回流程已完成便利性改善', async () => {
     const [app, html, css, requirements, uxNotes] = await Promise.all([read('app.js'), read('index.html'), read('styles.css'), read('PROJECT_REQUIREMENTS.md'), read('UX_IMPROVEMENTS.md')]);
     assert(html.indexOf('class="number-pad"') < html.indexOf('id="category-section"'), '數字鍵盤未移到高頻欄位前方。');

@@ -28,6 +28,10 @@ function amountValue(value, label) {
   return { value: number };
 }
 
+export function isExcludedFromIncomeExpense(transaction) {
+  return transaction.isReimbursement === true || Boolean(transaction.reimbursementTransactionId);
+}
+
 export function normalizeQueryFilters(rawFilters = {}, now = new Date()) {
   const dateMode = DATE_MODES.has(rawFilters.dateMode) ? rawFilters.dateMode : 'all';
   const type = TYPE_VALUES.has(rawFilters.type) ? rawFilters.type : 'all';
@@ -69,7 +73,7 @@ export function normalizeQueryFilters(rawFilters = {}, now = new Date()) {
 
 export function matchesQuery(transaction, filters) {
   if (transaction.type === 'transfer') return false;
-  if (filters.type !== 'all' && transaction.type !== filters.type) return false;
+  if (filters.type !== 'all' && (transaction.type !== filters.type || isExcludedFromIncomeExpense(transaction))) return false;
   if (filters.claimStatus === 'planned' && (transaction.type !== 'expense' || transaction.isPlannedClaim !== true || transaction.reimbursementTransactionId)) return false;
   if (filters.accountId && transaction.accountId !== filters.accountId) return false;
   if (filters.parentCategoryId && transaction.parentCategoryId !== filters.parentCategoryId) return false;
@@ -85,15 +89,16 @@ export function runTransactionQuery(transactions, rawFilters = {}, now = new Dat
   const normalized = normalizeQueryFilters(rawFilters, now);
   if (normalized.error) return { error: normalized.error, results: [], expenseTotal: 0, incomeTotal: 0, count: 0 };
   const results = transactions.filter((transaction) => matchesQuery(transaction, normalized.filters));
-  const expenseTotal = results.filter((transaction) => transaction.type === 'expense').reduce((total, transaction) => total + transaction.amount, 0);
-  const incomeTotal = results.filter((transaction) => transaction.type === 'income').reduce((total, transaction) => total + transaction.amount, 0);
+  const countedResults = results.filter((transaction) => !isExcludedFromIncomeExpense(transaction));
+  const expenseTotal = countedResults.filter((transaction) => transaction.type === 'expense').reduce((total, transaction) => total + transaction.amount, 0);
+  const incomeTotal = countedResults.filter((transaction) => transaction.type === 'income').reduce((total, transaction) => total + transaction.amount, 0);
   return { ...normalized, results, expenseTotal, incomeTotal, count: results.length };
 }
 
 export function parentCategoryBreakdown(results, parentCategoryId) {
   const entries = new Map();
   for (const transaction of results) {
-    if (transaction.type !== 'expense' || transaction.parentCategoryId !== parentCategoryId) continue;
+    if (transaction.type !== 'expense' || transaction.parentCategoryId !== parentCategoryId || isExcludedFromIncomeExpense(transaction)) continue;
     const entryId = transaction.isDirectParentExpense === true ? `direct:${transaction.parentCategoryId}` : transaction.subcategoryId;
     const current = entries.get(entryId) || {
       id: entryId,
@@ -108,7 +113,7 @@ export function parentCategoryBreakdown(results, parentCategoryId) {
 }
 
 export function subcategorySummary(results, subcategoryId) {
-  const transactions = results.filter((transaction) => transaction.subcategoryId === subcategoryId);
+  const transactions = results.filter((transaction) => transaction.subcategoryId === subcategoryId && !isExcludedFromIncomeExpense(transaction));
   return {
     totalExpense: transactions.filter((transaction) => transaction.type === 'expense').reduce((total, transaction) => total + transaction.amount, 0),
     count: transactions.length,

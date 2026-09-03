@@ -51,7 +51,7 @@ export async function runStage7Tests() {
       const balances = calculateAccountBalances(restored.accounts, restored.transactions);
       assert(balances.get(cash.id) === 924.5 && balances.get(bank.id) === 720, '還原後帳戶餘額錯誤。');
       const query = runTransactionQuery(restored.transactions, { parentCategoryId: food.id }, '2026-08-25');
-      assert(query.expenseTotal === 185.5 && query.incomeTotal === 0, '無類別收入不應被母類別查詢納入。');
+      assert(query.expenseTotal === 125.5 && query.incomeTotal === 0, '無類別收入或已報銷原支出不應被母類別收支統計納入。');
     });
 
     await test('無效 JSON 備份不會修改既有資料', async () => {

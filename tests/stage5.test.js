@@ -57,6 +57,18 @@ export async function runStage5Tests() {
       assert(pending.count === 0 && result.reimbursement.amount === 100 && result.reimbursement.note.includes('早餐') && reimbursedTransactions.some((transaction) => transaction.id === result.reimbursement.id && transaction.type === 'income'), '合併報銷沒有正確建立或解除預計請款。');
     });
 
+    await test('報銷收入與其原始支出不列入收支及類別統計', async () => {
+      const reimbursedTransactions = await repository.listTransactions();
+      const query = runTransactionQuery(reimbursedTransactions, { dateMode: 'date', specificDate: '2026-08-24' }, now);
+      const incomeOnly = runTransactionQuery(reimbursedTransactions, { dateMode: 'date', specificDate: '2026-08-24', type: 'income' }, now);
+      const expenseOnly = runTransactionQuery(reimbursedTransactions, { dateMode: 'date', specificDate: '2026-08-24', type: 'expense' }, now);
+      const breakdown = parentCategoryBreakdown(query.results, food.id);
+      const summary = subcategorySummary(query.results, meal.id);
+      assert(query.expenseTotal === 0 && query.incomeTotal === 300, '報銷收入或已報銷原支出仍被計入收支總額。');
+      assert(incomeOnly.count === 1 && incomeOnly.incomeTotal === 300 && expenseOnly.count === 0, '指定收入或支出類型時仍包含報銷關聯項目。');
+      assert(breakdown.totalExpense === 0 && summary.totalExpense === 0, '已報銷原支出仍被計入類別統計。');
+    });
+
     await test('今天、本月、特定日期與特定月份的日期邊界正確', async () => {
       const today = runTransactionQuery(transactions, { dateMode: 'today' }, now);
       const month = runTransactionQuery(transactions, { dateMode: 'month' }, now);
