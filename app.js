@@ -1,5 +1,5 @@
 import { DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js';
-import { isExcludedFromIncomeExpense, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js';
 import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js';
 
 const state = {
@@ -84,9 +84,9 @@ function isTransactionInSelectedAccount(transaction) {
 }
 
 function getTransactionNet(transaction) {
-  if (isExcludedFromIncomeExpense(transaction)) return 0;
-  if (transaction.type === 'income') return transaction.amount;
-  if (transaction.type === 'expense') return -transaction.amount;
+  const amount = incomeExpenseAmount(transaction, state.transactions);
+  if (transaction.type === 'income') return amount;
+  if (transaction.type === 'expense') return -amount;
   return 0;
 }
 
@@ -183,7 +183,12 @@ function batchReimbursementItemsMarkup(transaction) {
   return sources.map((source) => `<li><span>${escapeHTML(transactionTitle(source))}</span><strong>${currency(source.amount)}</strong></li>`).join('');
 }
 function queryTransactionRowMarkup(transaction) {
-  return `<div class="query-row"><div><b>${escapeHTML(transactionTitle(transaction))}</b><span>${escapeHTML(transaction.date)} · ${escapeHTML(transaction.accountName)} · ${escapeHTML(transaction.time)}</span>${transactionNoteMarkup(transaction)}</div><strong class="${transaction.type}">${transactionAmountText(transaction)}</strong></div>`;
+  const adjustedExpense = transaction.type === 'expense' && Number.isFinite(transaction.statisticalAmount) && transaction.statisticalAmount < transaction.amount;
+  const amountText = adjustedExpense ? `-${currency(transaction.statisticalAmount)}` : transactionAmountText(transaction);
+  const reimbursementDetail = adjustedExpense
+    ? `<small class="transaction-note">原支出 ${currency(transaction.amount)} · 已報銷 ${currency(transaction.amount - transaction.statisticalAmount)}</small>`
+    : '';
+  return `<div class="query-row"><div><b>${escapeHTML(transactionTitle(transaction))}</b><span>${escapeHTML(transaction.date)} · ${escapeHTML(transaction.accountName)} · ${escapeHTML(transaction.time)}</span>${transactionNoteMarkup(transaction)}${reimbursementDetail}</div><strong class="${transaction.type}">${amountText}</strong></div>`;
 }
 function prepareClaimSelection(status, transactions) {
   const availableIds = new Set(transactions.map((transaction) => transaction.id));

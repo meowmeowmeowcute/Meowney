@@ -69,6 +69,18 @@ export async function runStage5Tests() {
       assert(breakdown.totalExpense === 0 && summary.totalExpense === 0, '已報銷原支出仍被計入類別統計。');
     });
 
+    await test('部分報銷只將未報銷差額列入支出與類別統計', async () => {
+      const partialExpense = { id: 'partial-expense', type: 'expense', amount: 100, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, reimbursementTransactionId: 'partial-reimbursement', date: '2026-08-24', time: '14:00' };
+      const partialReimbursement = { id: 'partial-reimbursement', type: 'income', amount: 60, accountId: cash.id, isReimbursement: true, reimbursementExpenseId: partialExpense.id, reimbursementExpenseIds: [partialExpense.id], isBatchReimbursement: false, date: '2026-08-24', time: '14:00' };
+      const partialQuery = runTransactionQuery([partialExpense, partialReimbursement], {}, now);
+      const expenseOnly = runTransactionQuery([partialExpense, partialReimbursement], { type: 'expense' }, now);
+      const breakdown = parentCategoryBreakdown(partialQuery.results, food.id);
+      const summary = subcategorySummary(partialQuery.results, meal.id);
+      assert(partialQuery.expenseTotal === 40 && partialQuery.incomeTotal === 0, '部分報銷沒有只計入未報銷差額。');
+      assert(expenseOnly.count === 1 && expenseOnly.expenseTotal === 40, '部分報銷的原始支出無法在支出查詢中以差額統計。');
+      assert(breakdown.totalExpense === 40 && summary.totalExpense === 40, '部分報銷差額沒有正確計入類別統計。');
+    });
+
     await test('今天、本月、特定日期與特定月份的日期邊界正確', async () => {
       const today = runTransactionQuery(transactions, { dateMode: 'today' }, now);
       const month = runTransactionQuery(transactions, { dateMode: 'month' }, now);

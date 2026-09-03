@@ -1,4 +1,4 @@
-const CACHE_NAME = 'meowney-app-shell-v23';
+const CACHE_NAME = 'meowney-app-shell-v25';
 const APP_SHELL = [
   './',
   './index.html',
