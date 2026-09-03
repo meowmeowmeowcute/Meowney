@@ -30,7 +30,10 @@
           <section class="transactions-section" aria-labelledby="transactions-title">
             <div class="section-heading">
               <h2 id="transactions-title">交易紀錄</h2>
-              <span id="transaction-count">所有帳戶</span>
+              <div class="section-heading__actions">
+                <span id="transaction-count">所有帳戶</span>
+                <button id="open-batch-reimbursement" class="text-action text-action--compact" type="button" hidden>合併報銷</button>
+              </div>
             </div>
             <div id="transaction-list" class="transaction-list" aria-live="polite"></div>
           </section>
@@ -103,11 +106,22 @@
             </div>
             <p id="query-guidance" class="query-guidance">選擇母類別或子類別後，可查看已篩選的類別統計。</p>
             <section id="planned-claim-query-details" class="query-detail" hidden>
-              <div class="query-detail__heading"><h3>尚未請款</h3><strong id="planned-claim-query-total">NT$ 0</strong></div>
-              <p id="planned-claim-query-count" class="query-detail__count">0 筆</p>
-              <div id="planned-claim-query-list" class="query-list"></div>
+              <div class="query-detail__heading"><h3>可合併報銷項目</h3><strong id="planned-claim-query-total">NT$ 0</strong></div>
+              <p id="planned-claim-query-count" class="query-detail__count">0 筆可選</p>
               <div id="planned-claim-actions" class="claim-actions" hidden>
-                <p class="query-guidance">會新增一筆合計報銷收入，並在備註列出已選項目；限同一帳戶。</p>
+                <div class="claim-selection-summary" aria-live="polite">
+                  <span>已選 <b id="claim-selected-count">0 筆</b></span>
+                  <span>帳戶 <b id="claim-selected-account">尚未選擇</b></span>
+                  <span>合計 <strong id="claim-selected-total">NT$ 0</strong></span>
+                </div>
+                <div class="claim-selection-controls">
+                  <button id="clear-claim-selection" class="button button--secondary" type="button">清除選取</button>
+                  <button id="cancel-batch-reimbursement" class="button button--secondary" type="button">取消合併</button>
+                </div>
+                <p id="claim-selection-guidance" class="query-guidance">所選項目會新增一筆合計報銷收入；同一筆只能選擇同一帳戶，可直接使用各帳戶的「全選此帳戶」。</p>
+              </div>
+              <div id="planned-claim-query-list" class="query-list"></div>
+              <div id="planned-claim-submit" class="claim-submit-actions" hidden>
                 <label class="note-field">報銷備註（選填）
                   <textarea id="claim-note-input" rows="2" placeholder="例如：九月費用報銷"></textarea>
                 </label>

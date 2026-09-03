@@ -77,6 +77,9 @@ export async function runStage2Tests() {
       assert(linkedSources.length === 2 && linkedSources.every((transaction) => transaction.isPlannedClaim === false && transaction.claimBatchId === null && transaction.claimNote === null), '合併報銷沒有原子解除原支出的請款狀態。');
       const balancesAfter = calculateAccountBalances(await repository.listAccounts(), submitted);
       assert(balancesAfter.get(cash.id) === balancesBefore.get(cash.id) + 45 && balancesAfter.get(bank.id) === balancesBefore.get(bank.id), '合併報銷沒有只以一筆收入增加正確帳戶餘額。');
+      const beforeDuplicateAttempt = await repository.listTransactions();
+      await rejects(() => repository.createBatchReimbursement([directExpense.id, secondExpense.id], '重複報銷', '2026-08-24', '09:05'), DataValidationError);
+      assert(JSON.stringify(await repository.listTransactions()) === JSON.stringify(beforeDuplicateAttempt), '已報銷支出仍可被重複加入，或失敗後改動了資料。');
       const cashClaim = await repository.createTransaction({ type: 'expense', amount: 3, accountId: cash.id, parentCategoryId: other.id, note: '現金待報銷', isPlannedClaim: true, date: '2026-08-24', time: '09:10' });
       const bankClaim = await repository.createTransaction({ type: 'expense', amount: 4, accountId: bank.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '銀行待報銷', isPlannedClaim: true, date: '2026-08-24', time: '09:15' });
       const beforeMixedAccountAttempt = await repository.listTransactions();

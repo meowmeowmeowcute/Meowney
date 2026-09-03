@@ -15,6 +15,7 @@ const state = {
   csvImportText: null,
   claimSelection: new Set(),
   claimSelectionStatus: null,
+  claimCandidates: [],
   transactionDefaults: {},
 };
 
@@ -186,32 +187,79 @@ function queryTransactionRowMarkup(transaction) {
 function prepareClaimSelection(status, transactions) {
   const availableIds = new Set(transactions.map((transaction) => transaction.id));
   if (state.claimSelectionStatus !== status) {
-    state.claimSelection = new Set(availableIds);
+    const accountIds = new Set(transactions.map((transaction) => transaction.accountId));
+    state.claimSelection = accountIds.size === 1 ? new Set(availableIds) : new Set();
     state.claimSelectionStatus = status;
     return;
   }
   state.claimSelection = new Set([...state.claimSelection].filter((id) => availableIds.has(id)));
+  const selectedAccounts = new Set(transactions.filter((transaction) => state.claimSelection.has(transaction.id)).map((transaction) => transaction.accountId));
+  if (selectedAccounts.size > 1) state.claimSelection.clear();
 }
-function claimSelectionRowMarkup(transaction) {
+function selectedClaimTransactions() {
+  return state.claimCandidates.filter((transaction) => state.claimSelection.has(transaction.id));
+}
+function selectedClaimAccountId() { return selectedClaimTransactions()[0]?.accountId || null; }
+function claimSelectionRowMarkup(transaction, lockedAccountId) {
   const selected = state.claimSelection.has(transaction.id);
-  return `<label class="claim-selectable"><input type="checkbox" data-claim-select="${transaction.id}" ${selected ? 'checked' : ''} aria-label="選擇 ${escapeHTML(transactionTitle(transaction))}" />${queryTransactionRowMarkup(transaction)}</label>`;
+  const blocked = Boolean(lockedAccountId && transaction.accountId !== lockedAccountId);
+  return `<label class="claim-selectable ${blocked ? 'claim-selectable--blocked' : ''}"><input type="checkbox" data-claim-select="${transaction.id}" ${selected ? 'checked' : ''} ${blocked ? 'disabled' : ''} aria-label="選擇 ${escapeHTML(transactionTitle(transaction))}" />${queryTransactionRowMarkup(transaction)}</label>`;
 }
-function updateClaimActionLabel(transactionCount) {
-  const selectedCount = state.claimSelection.size;
-  $('#create-batch-reimbursement').disabled = selectedCount === 0;
-  $('#create-batch-reimbursement').textContent = `建立合併報銷（${selectedCount}/${transactionCount}）`;
+function claimAccountGroups(transactions) {
+  const groups = new Map();
+  transactions.forEach((transaction) => {
+    if (!groups.has(transaction.accountId)) groups.set(transaction.accountId, { accountId: transaction.accountId, accountName: transaction.accountName, transactions: [] });
+    groups.get(transaction.accountId).transactions.push(transaction);
+  });
+  return [...groups.values()];
 }
-function bindClaimSelection(transactionCount) {
+function updateClaimActionLabel() {
+  const selected = selectedClaimTransactions();
+  const accountName = selected[0]?.accountName || '尚未選擇';
+  const selectedTotal = selected.reduce((total, transaction) => total + transaction.amount, 0);
+  const accountCount = claimAccountGroups(state.claimCandidates).length;
+  $('#claim-selected-count').textContent = `${selected.length} 筆`;
+  $('#claim-selected-account').textContent = accountName;
+  $('#claim-selected-total').textContent = currency(selectedTotal);
+  $('#clear-claim-selection').disabled = selected.length === 0;
+  $('#create-batch-reimbursement').disabled = selected.length === 0;
+  $('#create-batch-reimbursement').textContent = selected.length ? `建立合併報銷（${selected.length} 筆 · ${currency(selectedTotal)}）` : '請先選擇報銷項目';
+  $('#claim-selection-guidance').textContent = accountCount > 1 && !selected.length
+    ? '目前包含多個帳戶，請選一筆，或使用下方「全選此帳戶」；不同帳戶必須分開建立。'
+    : accountCount > 1 && selected.length
+      ? '其他帳戶已暫時停用，避免誤把不同帳戶合併。'
+      : selected.length
+        ? '目前候選項目都屬於同一帳戶；可取消不需要的項目，建立前會再次確認。'
+        : '選取後會在建立前再次顯示筆數、帳戶與總金額。';
+}
+function renderClaimSelection(transactions, { prepare = false } = {}) {
+  state.claimCandidates = transactions;
+  if (prepare) prepareClaimSelection('planned', transactions);
+  const lockedAccountId = selectedClaimAccountId();
+  $('#planned-claim-query-list').innerHTML = transactions.length
+    ? claimAccountGroups(transactions).map((group) => `<section class="claim-account-group" aria-label="${escapeHTML(group.accountName)}待報銷項目">
+      <header class="claim-account-group__heading"><span><b>${escapeHTML(group.accountName)}</b><small>${group.transactions.length} 筆 · ${currency(group.transactions.reduce((total, transaction) => total + transaction.amount, 0))}</small></span><button class="button button--secondary" type="button" data-select-claim-account="${group.accountId}">${lockedAccountId && lockedAccountId !== group.accountId ? '改選此帳戶' : '全選此帳戶'}</button></header>
+      ${group.transactions.map((transaction) => claimSelectionRowMarkup(transaction, lockedAccountId)).join('')}
+    </section>`).join('')
+    : '<div class="empty-state">沒有可合併的支出。只有標記「預計請款」且尚未報銷的支出會顯示。</div>';
+  updateClaimActionLabel();
   $$('[data-claim-select]').forEach((input) => input.addEventListener('change', () => {
     if (input.checked) state.claimSelection.add(input.dataset.claimSelect);
     else state.claimSelection.delete(input.dataset.claimSelect);
-    updateClaimActionLabel(transactionCount);
+    renderClaimSelection(transactions);
+  }));
+  $$('[data-select-claim-account]').forEach((button) => button.addEventListener('click', () => {
+    state.claimSelection = new Set(transactions.filter((transaction) => transaction.accountId === button.dataset.selectClaimAccount).map((transaction) => transaction.id));
+    renderClaimSelection(transactions);
   }));
 }
 
 function renderTransactions() {
   const selectedAccount = getSelectedAccount();
   const transactions = state.transactions.filter(isTransactionInSelectedAccount);
+  const plannedClaims = transactions.filter((transaction) => transaction.type === 'expense' && transaction.isPlannedClaim === true && !transaction.reimbursementTransactionId);
+  $('#open-batch-reimbursement').hidden = plannedClaims.length === 0;
+  $('#open-batch-reimbursement').textContent = `合併報銷 ${plannedClaims.length}`;
   $('#records-title').textContent = selectedAccount ? selectedAccount.name : '全部';
   $('#transaction-count').textContent = selectedAccount ? `${transactions.length} 筆 · 再點帳戶顯示全部` : `${transactions.length} 筆 · 所有帳戶`;
   if (!transactions.length) {
@@ -639,15 +687,11 @@ function renderQuery() {
       : '<div class="empty-state">沒有符合條件的交易。</div>';
   }
   if (hasPlannedClaims && !query.error) {
-    prepareClaimSelection('planned', query.results);
     $('#planned-claim-query-total').textContent = currency(query.expenseTotal);
-    $('#planned-claim-query-count').textContent = `${query.count} 筆`;
-    $('#planned-claim-query-list').innerHTML = query.results.length
-      ? query.results.map(claimSelectionRowMarkup).join('')
-      : '<div class="empty-state">沒有尚未請款的支出。</div>';
+    $('#planned-claim-query-count').textContent = `${query.count} 筆可選`;
+    renderClaimSelection(query.results, { prepare: true });
     $('#planned-claim-actions').hidden = !query.results.length;
-    updateClaimActionLabel(query.results.length);
-    bindClaimSelection(query.results.length);
+    $('#planned-claim-submit').hidden = !query.results.length;
   }
 }
 
@@ -662,8 +706,14 @@ function showToast(message) {
 }
 
 async function createBatchReimbursement() {
-  const transactionIds = [...state.claimSelection];
+  const selected = selectedClaimTransactions();
+  const transactionIds = selected.map((transaction) => transaction.id);
   if (!transactionIds.length) return showToast('請至少選擇一筆未請款支出。');
+  const accountIds = new Set(selected.map((transaction) => transaction.accountId));
+  if (accountIds.size !== 1) return showToast('不同帳戶必須分開建立合併報銷。');
+  const selectedTotal = selected.reduce((total, transaction) => total + transaction.amount, 0);
+  const accountName = selected[0].accountName;
+  if (!window.confirm(`將「${accountName}」的 ${selected.length} 筆支出合併為一筆 ${currency(selectedTotal)} 的報銷收入。建立後原支出會取消預計請款，確定建立嗎？`)) return;
   try {
     const batch = await state.repository.createBatchReimbursement(transactionIds, $('#claim-note-input').value, todayValue(), timeValue());
     state.claimSelection.clear();
@@ -671,10 +721,52 @@ async function createBatchReimbursement() {
     $('#claim-note-input').value = '';
     await loadData();
     render();
-    showToast(`已新增一筆合併報銷，共 ${batch.transactionIds.length} 項。`);
+    setPage('records');
+    openSheet(batch.reimbursement.id);
+    showToast(`已建立 ${batch.transactionIds.length} 筆、${currency(batch.reimbursement.amount)} 的合併報銷。`);
   } catch (error) {
-    showToast(error.message || '建立合併報銷時發生問題。');
+    if ((error.message || '').includes('已變更')) {
+      state.claimSelection.clear();
+      state.claimSelectionStatus = null;
+      await loadData();
+      render();
+      showToast('待報銷清單已變更，已重新整理；請重新確認後再建立。');
+    } else showToast(error.message || '建立合併報銷時發生問題。');
   }
+}
+
+function clearClaimSelection() {
+  state.claimSelection.clear();
+  renderClaimSelection(state.claimCandidates);
+}
+
+function cancelBatchReimbursement() {
+  state.claimSelection.clear();
+  state.claimSelectionStatus = null;
+  state.claimCandidates = [];
+  $('#claim-note-input').value = '';
+  $('#query-claim-status').value = 'all';
+  renderQuery();
+  setPage('records');
+}
+
+function openBatchReimbursementFlow() {
+  state.claimSelection.clear();
+  state.claimSelectionStatus = null;
+  $('#claim-note-input').value = '';
+  setPage('query');
+  $('#query-date').value = 'all';
+  $('#query-type').value = 'all';
+  $('#query-claim-status').value = 'planned';
+  $('#query-parent').value = 'all';
+  refreshQueryOptions();
+  $('#query-category').value = 'all';
+  $('#query-note').value = '';
+  $('#query-min').value = '';
+  $('#query-max').value = '';
+  $('#query-account').value = validAccountId(state.selectedAccountId) || 'all';
+  renderQuery();
+  setTimeout(() => $('#planned-claim-query-details').scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
 }
 
 function downloadTextFile(content, filename, mimeType) {
@@ -897,6 +989,9 @@ function initialiseEvents() {
   $('#run-query').addEventListener('click', renderQuery);
   $('#query-date').addEventListener('change', updateQueryDateInput);
   $('#query-parent').addEventListener('change', () => { refreshQueryOptions(); renderQuery(); });
+  $('#open-batch-reimbursement').addEventListener('click', openBatchReimbursementFlow);
+  $('#clear-claim-selection').addEventListener('click', clearClaimSelection);
+  $('#cancel-batch-reimbursement').addEventListener('click', cancelBatchReimbursement);
   $('#create-batch-reimbursement').addEventListener('click', createBatchReimbursement);
   $('#export-json').addEventListener('click', exportJsonBackup);
   $('#import-json').addEventListener('click', () => $('#json-import-input').click());

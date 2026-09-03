@@ -58,6 +58,16 @@ export async function runStage8Tests() {
     assert(app.includes('createBatchReimbursement(transactionIds') && app.includes('建立合併報銷'), '合併報銷選取與建立流程沒有連接。');
     assert(dataLayer.includes('async createBatchReimbursement') && dataLayer.includes('buildBatchReimbursementTransaction'), '合併報銷資料操作不存在。');
   });
+  await test('合併報銷可直接進入、依帳戶安全選取並在完成後立即核對', async () => {
+    const [app, html, css, requirements, uxNotes] = await Promise.all([read('app.js'), read('index.html'), read('styles.css'), read('PROJECT_REQUIREMENTS.md'), read('UX_IMPROVEMENTS.md')]);
+    assert(html.includes('id="open-batch-reimbursement"') && app.includes('openBatchReimbursementFlow'), '紀錄頁缺少合併報銷捷徑。');
+    assert(app.includes('claimAccountGroups(transactions)') && app.includes('data-select-claim-account') && app.includes('claim-selectable--blocked'), '候選項目沒有依帳戶分組或防止跨帳戶誤選。');
+    assert(html.includes('id="claim-selected-count"') && html.includes('id="claim-selected-account"') && html.includes('id="claim-selected-total"'), '選取筆數、帳戶或合計金額摘要不完整。');
+    assert(html.includes('id="clear-claim-selection"') && html.includes('id="cancel-batch-reimbursement"') && app.includes('clearClaimSelection') && app.includes('cancelBatchReimbursement'), '清除選取或取消整個流程的入口不完整。');
+    assert(app.includes('window.confirm(`將「${accountName}」的 ${selected.length} 筆支出') && app.includes("openSheet(batch.reimbursement.id)"), '建立前確認或建立後直接核對明細的流程不存在。');
+    assert(css.includes('.claim-selection-summary') && /\.text-action--compact\s*\{[^}]*min-height:\s*44px/.test(css) && /\.claim-account-group__heading \.button\s*\{[^}]*min-height:\s*44px/.test(css) && /\.claim-selection-controls \.button\s*\{[^}]*min-height:\s*44px/.test(css), '合併報銷摘要、入口、帳戶分組或手機觸控區樣式不完整。');
+    assert(requirements.includes('合併報銷操作流程改善') && uxNotes.includes('合併報銷流程改善'), '合併報銷改善規格或紀錄未更新。');
+  });
   await test('合併請款在列表簡潔顯示，明細會條列已報銷項目', async () => {
     const [app, html, css] = await Promise.all([read('app.js'), read('index.html'), read('styles.css')]);
     assert(app.includes("transaction.isBatchReimbursement === true) return '合併請款'") && app.includes('batchReimbursementItemsMarkup(transaction)') && app.includes('batchReimbursementReadOnly ? batchReimbursementItemsMarkup(form)'), '合併請款標題或明細條列流程缺失。');

@@ -38,6 +38,8 @@ h3 { margin: 0 0 8px; font-size: 14px; }
 h3 em { color: var(--muted); font-size: 12px; font-style: normal; font-weight: 500; }
 .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 2px; }
 .section-heading span { color: var(--muted); font-size: 12px; text-align: right; }
+.section-heading__actions { display: flex; align-items: center; justify-content: end; gap: 10px; }
+.text-action--compact { min-height: 44px; padding: 8px 0; white-space: nowrap; }
 
 .account-list { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(152px, 1fr); gap: 11px; overflow-x: auto; padding: 0 2px 6px; scrollbar-width: none; scroll-snap-type: x proximity; }
 .account-list::-webkit-scrollbar, .parent-tabs::-webkit-scrollbar { display: none; }
@@ -116,9 +118,23 @@ textarea { padding: 11px; resize: vertical; }
 .query-detail__heading strong { font-size: 17px; font-variant-numeric: tabular-nums; }
 .query-detail__count { margin: 5px 0 8px; color: var(--muted); font-size: 12px; }
 .claim-actions { display: grid; gap: 10px; margin-top: 13px; padding-top: 13px; border-top: 1px solid var(--line); }
-.claim-selectable { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255, 255, 255, .06); cursor: pointer; }
+.claim-account-group { padding: 11px; border: 1px solid var(--line); border-radius: 13px; background: #1c2123; }
+.claim-account-group + .claim-account-group { margin-top: 8px; }
+.claim-account-group__heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 5px; }
+.claim-account-group__heading span { display: grid; gap: 2px; }
+.claim-account-group__heading small { color: var(--muted); font-size: 11px; }
+.claim-account-group__heading .button { min-height: 44px; padding: 6px 10px; font-size: 12px; }
+.claim-selectable { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: center; min-height: 54px; padding: 10px 0; border-bottom: 1px solid rgba(255, 255, 255, .06); cursor: pointer; }
 .claim-selectable input { width: 21px; height: 21px; min-height: 0; accent-color: var(--accent); }
 .claim-selectable .query-row { padding: 0; border: 0; }
+.claim-selectable--blocked { opacity: .45; cursor: not-allowed; }
+.claim-selection-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.claim-selection-summary span { min-width: 0; padding: 9px; border-radius: 10px; background: #252a2d; color: var(--muted); font-size: 11px; }
+.claim-selection-summary b, .claim-selection-summary strong { display: block; overflow: hidden; margin-top: 4px; color: var(--text); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.claim-selection-summary strong { color: var(--accent); font-variant-numeric: tabular-nums; }
+.claim-selection-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.claim-selection-controls .button { min-height: 44px; }
+.claim-submit-actions { display: grid; gap: 10px; margin-top: 13px; padding-top: 13px; border-top: 1px solid var(--line); }
 .settings-group { padding: 8px 16px; }
 .settings-group h2 { margin: 10px 0; }
 .settings-group-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
