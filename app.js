@@ -1,6 +1,6 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=29';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=29';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=29';
 
 const state = {
   repository: null,
@@ -151,8 +151,11 @@ function transactionTitleMarkup(transaction) {
     ? '<small class="transaction-kind transaction-kind--planned">預計請款</small>'
     : '';
   const debtRemaining = transaction.debtDirection && transaction.type !== 'debt-settlement' ? calculateDebtRemaining(transaction, state.transactions) : null;
+  const debtRelationship = transaction.type === 'debt'
+    ? transaction.debtDirection === 'payable' ? '借入待還' : '借出待收'
+    : transaction.debtDirection === 'payable' ? '我欠別人' : '別人欠我';
   const debtLabel = debtRemaining !== null
-    ? `<small class="transaction-kind transaction-kind--debt">${transaction.debtDirection === 'payable' ? '我欠別人' : '別人欠我'} ${debtRemaining > 0 ? `(${transaction.debtDirection === 'payable' ? '-' : '+'}${currency(debtRemaining)})` : '（已結清）'}</small>`
+    ? `<small class="transaction-kind transaction-kind--debt">${debtRelationship} ${debtRemaining > 0 ? `(${transaction.debtDirection === 'payable' ? '-' : '+'}${currency(debtRemaining)})` : '（已結清）'}</small>`
     : '';
   const titleClass = usesNoteAsPrimaryTitle(transaction)
     ? 'transaction-title--note'
@@ -183,7 +186,7 @@ function transactionMeta(transaction) {
 }
 
 function transactionNoteMarkup(transaction) {
-  return transaction.note && !usesNoteAsPrimaryTitle(transaction) && transaction.isBatchReimbursement !== true ? `<small class="transaction-note">${escapeHTML(transaction.note)}</small>` : '';
+  return transaction.note && transaction.type !== 'debt-settlement' && !usesNoteAsPrimaryTitle(transaction) && transaction.isBatchReimbursement !== true ? `<small class="transaction-note">${escapeHTML(transaction.note)}</small>` : '';
 }
 
 function batchReimbursementItemsMarkup(transaction) {
@@ -295,7 +298,7 @@ function renderTransactions() {
     const relativeLabel = relativeDateLabel(date);
     return `<section class="date-group" aria-label="${formatDate(date)}${relativeLabel ? `，${relativeLabel}` : ''}交易">
       <header class="date-group__header"><h3>${formatDate(date)}${relativeLabel ? `<small>${relativeLabel}</small>` : ''}</h3><strong class="${net > 0 ? 'positive' : net < 0 ? 'negative' : ''}">${net === 0 ? currency(0) : signedCurrency(net)}</strong></header>
-      ${records.map((transaction) => `<button class="transaction-row" type="button" data-edit-id="${transaction.id}" aria-label="編輯 ${escapeHTML(transactionTitle(transaction))} ${transactionAmountText(transaction)}${transaction.isBatchReimbursement === true ? '，查看已報銷項目' : transaction.note ? `，備註 ${escapeHTML(transaction.note)}` : ''}">
+      ${records.map((transaction) => `<button class="transaction-row" type="button" data-edit-id="${transaction.id}" aria-label="${transaction.type === 'debt-settlement' ? '查看' : '編輯'} ${escapeHTML(transactionTitle(transaction))} ${transactionAmountText(transaction)}${transaction.isBatchReimbursement === true ? '，查看已報銷項目' : transaction.type !== 'debt-settlement' && transaction.note ? `，備註 ${escapeHTML(transaction.note)}` : ''}">
         <span class="transaction-icon" aria-hidden="true">${transactionIcon(transaction)}</span>
         <span class="transaction-details">${transactionTitleMarkup(transaction)}<span>${escapeHTML(transactionMeta(transaction))}</span>${transactionNoteMarkup(transaction)}</span>
         <strong class="transaction-amount ${transaction.type}">${transactionAmountText(transaction)}</strong>
@@ -320,7 +323,10 @@ function renderDebtOverview() {
   $('#receivable-total').textContent = `(+${currency(receivable)})`;
   $('#debt-overview-list').innerHTML = sources.map((source) => {
     const remaining = calculateDebtRemaining(source, state.transactions);
-    return `<button type="button" data-open-debt="${source.id}"><span><b>${escapeHTML(source.note)}</b><small>${source.debtDirection === 'payable' ? '我欠別人' : '別人欠我'} · ${escapeHTML(source.accountName)}</small></span><strong>${source.debtDirection === 'payable' ? '-' : '+'}${currency(remaining)}</strong></button>`;
+    const relationship = source.type === 'debt'
+      ? source.debtDirection === 'payable' ? '借入待還' : '借出待收'
+      : source.debtDirection === 'payable' ? '我欠別人' : '別人欠我';
+    return `<button type="button" data-open-debt="${source.id}"><span><b>${escapeHTML(source.note)}</b><small>${relationship} · ${escapeHTML(source.accountName)}</small></span><strong>${source.debtDirection === 'payable' ? '-' : '+'}${currency(remaining)}</strong></button>`;
   }).join('');
   $$('[data-open-debt]').forEach((button) => button.addEventListener('click', () => openSheet(button.dataset.openDebt)));
 }
@@ -440,14 +446,16 @@ function openSheet(editingId = null, { updateHistory = true } = {}) {
   const transaction = editingId ? state.transactions.find((item) => item.id === editingId) : null;
   state.form = transaction ? formFromTransaction(transaction) : createBlankForm();
   const batchReimbursement = transaction?.isBatchReimbursement === true;
-  $('#sheet-kicker').textContent = batchReimbursement ? '合併請款明細' : transaction ? '編輯交易' : '快速新增';
-  $('#sheet-title').textContent = batchReimbursement ? '合併請款' : transaction ? '修改這筆交易' : '記一筆交易';
+  const debtSettlement = transaction?.type === 'debt-settlement';
+  $('#sheet-kicker').textContent = batchReimbursement ? '合併請款明細' : debtSettlement ? '結清紀錄' : transaction ? '編輯交易' : '快速新增';
+  $('#sheet-title').textContent = batchReimbursement ? '合併請款' : debtSettlement ? (transaction.debtDirection === 'payable' ? '查看還款' : '查看收款') : transaction ? '修改這筆交易' : '記一筆交易';
   $('#delete-transaction').hidden = !transaction;
-  $('#delete-transaction').textContent = batchReimbursement ? '取消合併報銷' : '刪除';
+  $('#delete-transaction').textContent = batchReimbursement ? '取消合併報銷' : debtSettlement ? (transaction.debtDirection === 'payable' ? '刪除這次還款' : '刪除這次收款') : '刪除';
   $('#form-error').hidden = true;
   $('#sheet-overlay').hidden = false;
   $('#transaction-sheet').hidden = false;
   document.body.style.overflow = 'hidden';
+  $('#more-options').open = state.form.moreOptionsExpanded;
   renderSheet();
   $('.sheet-body').scrollTop = 0;
   setTimeout(() => $('#close-sheet').focus(), 0);
@@ -473,12 +481,21 @@ function renderSheet() {
   const debtSettlementReadOnly = form.isDebtSettlement === true;
   const batchReimbursementReadOnly = reimbursementReadOnly && form.isBatchReimbursement === true;
   const batchReimbursementSource = !reimbursementReadOnly && form.isBatchReimbursement === true;
+  const currentTransaction = form.id ? state.transactions.find((item) => item.id === form.id) : null;
+  const settlementSource = debtSettlementReadOnly ? state.transactions.find((item) => item.id === form.debtSourceId) : null;
   $$('.type-switch__item').forEach((button) => {
     button.classList.toggle('type-switch__item--active', button.dataset.type === form.type);
     button.disabled = Boolean(form.id);
   });
+  $('#transaction-type-switch').hidden = debtSettlementReadOnly;
+  $('#number-pad').hidden = debtSettlementReadOnly;
+  $('#amount-label').textContent = debtSettlementReadOnly ? (form.debtDirection === 'payable' ? '還款金額' : '收款金額') : '金額';
   $('#amount-display').textContent = currency(Number(form.amountText) || 0);
-  $('#more-options').open = form.moreOptionsExpanded;
+  $('#debt-settlement-summary').hidden = !debtSettlementReadOnly;
+  $('#debt-settlement-summary').innerHTML = debtSettlementReadOnly ? `
+    <p><span>借貸來源</span><strong>${escapeHTML(settlementSource?.note || '原借貸項目')}</strong></p>
+    <p><span>使用帳戶</span><strong>${escapeHTML(currentTransaction?.accountName || '已刪除帳戶')}</strong></p>
+    <p><span>登記時間</span><strong>${escapeHTML(`${form.date.replaceAll('-', '/')} ${form.time}`)}</strong></p>` : '';
   $('#category-section').hidden = form.type !== 'expense';
   $('#single-account-section').hidden = form.type === 'transfer' || reimbursementReadOnly || debtSettlementReadOnly;
   $('#transfer-account-section').hidden = form.type !== 'transfer';
@@ -493,18 +510,30 @@ function renderSheet() {
   $('#batch-reimbursement-items').innerHTML = batchReimbursementReadOnly ? batchReimbursementItemsMarkup(form) : '';
   $('#reimbursement-section').hidden = form.type !== 'expense' || reimbursementReadOnly || batchReimbursementSource || Boolean(form.debtDirection);
   $('#debt-section').hidden = !['expense', 'debt'].includes(form.type) || reimbursementReadOnly || batchReimbursementSource;
-  $('#debt-guidance').textContent = form.type === 'debt' ? '不連結消費，只記錄借入或借出' : '可只登記支出中的部分金額';
-  $('[data-debt-direction=""]').hidden = form.type === 'debt';
   const hasDebtSettlements = Boolean(form.id && state.transactions.some((item) => item.type === 'debt-settlement' && item.debtSourceId === form.id));
-  $$('[data-debt-direction]').forEach((button) => {
+  $('#debt-label').textContent = form.type === 'debt' ? '借貸方向' : '欠款狀態';
+  $('#debt-guidance').textContent = hasDebtSettlements ? '已有結清紀錄，方向不可變更' : form.type === 'debt' ? '不連結消費，只記錄借入或借出' : '可只登記支出中的部分金額';
+  $('[data-debt-direction=""]').hidden = form.type === 'debt';
+  const directionButtons = $$('[data-debt-direction]');
+  directionButtons.find((button) => button.dataset.debtDirection === 'payable').textContent = form.type === 'debt' ? '借入' : '我欠別人';
+  directionButtons.find((button) => button.dataset.debtDirection === 'receivable').textContent = form.type === 'debt' ? '借出' : '別人欠我';
+  directionButtons.forEach((button) => {
     button.classList.toggle('chip--active', button.dataset.debtDirection === (form.debtDirection || ''));
     button.disabled = hasDebtSettlements;
   });
   $('#debt-amount-field').hidden = form.type !== 'expense' || !form.debtDirection;
+  $('#debt-amount-label').textContent = form.debtDirection === 'receivable' ? '待收金額（必填）' : '尚欠金額（必填）';
   $('#debt-amount-input').value = form.debtAmountText;
   const debtAmount = form.type === 'debt' ? Number(form.amountText || 0) : Number(form.debtAmountText || 0);
   $('#debt-impact').hidden = !form.debtDirection || debtAmount <= 0;
-  $('#debt-impact').textContent = form.debtDirection === 'payable' ? `帳戶目前少付 ${currency(debtAmount)}，待還款。` : `對方待還 ${currency(debtAmount)}，收款時再回到帳戶。`;
+  const totalAmount = Number(form.amountText || 0);
+  $('#debt-impact').textContent = form.type === 'debt'
+    ? form.debtDirection === 'payable'
+      ? `借入後帳戶增加 ${currency(totalAmount)}；不計入收入。`
+      : `借出後帳戶減少 ${currency(totalAmount)}；不計入支出。`
+    : form.debtDirection === 'payable'
+      ? `本次帳戶先扣 ${currency(Math.max(totalAmount - debtAmount, 0))}，另有 ${currency(debtAmount)} 待還；支出計 ${currency(totalAmount)}。`
+      : `本次帳戶扣 ${currency(totalAmount)}，其中 ${currency(debtAmount)} 待收；支出計 ${currency(Math.max(totalAmount - debtAmount, 0))}。`;
   $('#planned-claim-toggle').setAttribute('aria-pressed', String(form.isPlannedClaim));
   $('#planned-claim-toggle').classList.toggle('reimbursement-toggle--active', form.isPlannedClaim);
   $('#planned-claim-toggle-status').textContent = form.isPlannedClaim ? '可在查詢中查看尚未請款的支出' : '報銷後會自動取消這個標記';
@@ -516,7 +545,7 @@ function renderSheet() {
   $('#reimbursement-amount-input').value = form.reimbursementAmountText;
   $('#reimbursement-note-field').hidden = !form.reimbursementEnabled || form.type !== 'expense' || reimbursementReadOnly;
   $('#reimbursement-note-input').value = form.reimbursementNote;
-  $('#note-field-label').textContent = reimbursementReadOnly ? '報銷備註（選填）' : form.debtDirection ? `${form.type === 'debt' ? '借貸' : '欠款'}對象／備註（必填）` : '備註（選填）';
+  $('#note-field-label').textContent = reimbursementReadOnly ? '報銷備註（選填）' : form.debtDirection ? '對象／備註（必填）' : '備註（選填）';
   $('#transaction-note-field').hidden = batchReimbursementReadOnly;
   $('#note-input').value = form.note;
   $('#note-input').disabled = batchReimbursementReadOnly || debtSettlementReadOnly;
@@ -526,7 +555,9 @@ function renderSheet() {
   $('#date-time-fields').hidden = reimbursementReadOnly || debtSettlementReadOnly || !form.dateTimeExpanded;
   $('#date-time-summary').textContent = `${form.date.replaceAll('-', '/')} ${form.time}`;
   $$('.number-pad button').forEach((button) => { button.disabled = batchReimbursementReadOnly || debtSettlementReadOnly; });
-  $('#save-transaction').disabled = batchReimbursementReadOnly || debtSettlementReadOnly;
+  $('#more-options').hidden = debtSettlementReadOnly;
+  $('#save-transaction').hidden = debtSettlementReadOnly;
+  $('#save-transaction').disabled = batchReimbursementReadOnly;
   $('#parent-options').innerHTML = state.categories.map((parent) => `<button type="button" class="parent-tab ${parent.id === form.parentId ? 'parent-tab--active' : ''}" data-parent-id="${parent.id}" aria-pressed="${parent.id === form.parentId}">${escapeHTML(parent.name)}</button>`).join('');
   const parent = selectedParent();
   $('#category-guidance').textContent = parent?.allowsDirectExpense ? '「其他」不需要子類別' : '先選母類別，再選子類別';
@@ -544,10 +575,12 @@ function renderSheet() {
   const remaining = source ? calculateDebtRemaining(source, state.transactions) : 0;
   $('#debt-status-details').hidden = !source;
   $('#debt-remaining').textContent = source ? `未結清 ${currency(remaining)}` : '';
-  $('#debt-settlement-history').innerHTML = settlements.length ? settlements.map((item) => `<button type="button" data-edit-settlement="${item.id}"><span>${item.debtDirection === 'payable' ? '已還款' : '已收款'} · ${item.date}</span><strong>${currency(item.amount)}</strong></button>`).join('') : '<p>尚無還款或收款紀錄。</p>';
+  $('#debt-settlement-history').innerHTML = settlements.length ? settlements.map((item) => `<button type="button" data-edit-settlement="${item.id}"><span>${item.debtDirection === 'payable' ? '已還款' : '已收款'} · ${item.date}<small>查看／刪除</small></span><strong>${currency(item.amount)}</strong></button>`).join('') : '<p>尚無還款或收款紀錄。</p>';
   $('#debt-settlement-accounts').innerHTML = accountChips('data-settlement-account-id', form.settlementAccountId);
   $('#save-debt-settlement').disabled = remaining <= 0;
   $('#save-debt-settlement').textContent = remaining <= 0 ? '已結清' : form.debtDirection === 'payable' ? '登記還款' : '登記收款';
+  $('#fill-debt-remaining').hidden = !source || remaining <= 0;
+  $('#fill-debt-remaining').textContent = source ? `填入全部 ${currency(remaining)}` : '填入全部未結清金額';
   $$('[data-parent-id]').forEach((button) => button.addEventListener('click', () => { form.parentId = button.dataset.parentId; form.categoryId = null; renderSheet(); }));
   $$('[data-category-id]').forEach((button) => button.addEventListener('click', () => { form.categoryId = button.dataset.categoryId; renderSheet(); }));
   $$('[data-account-id]').forEach((button) => button.addEventListener('click', () => { form.accountId = button.dataset.accountId; renderSheet(); }));
@@ -657,10 +690,12 @@ function showDeleteConfirm({ updateHistory = true } = {}) {
   const sourceCount = state.form?.reimbursementExpenseIds?.length || 0;
   const linkedSettlements = state.form?.debtDirection && !state.form?.isDebtSettlement
     ? state.transactions.filter((item) => item.type === 'debt-settlement' && item.debtSourceId === state.form.id).length : 0;
-  $('#confirm-title').textContent = cancellingBatch ? '取消這筆合併報銷？' : '刪除這筆交易？';
+  const deletingSettlement = state.form?.isDebtSettlement === true;
+  $('#confirm-title').textContent = cancellingBatch ? '取消這筆合併報銷？' : deletingSettlement ? `刪除這次${state.form.debtDirection === 'payable' ? '還款' : '收款'}？` : '刪除這筆交易？';
   $('#confirm-message').textContent = cancellingBatch
     ? `將刪除這筆報銷收入，並把 ${sourceCount} 筆原始支出恢復為預計請款。`
-    : linkedSettlements ? `刪除後無法復原，並會一併刪除 ${linkedSettlements} 筆還款或收款紀錄。` : '刪除後無法復原。';
+    : deletingSettlement ? '刪除後，這筆金額會重新列入原借貸的未結清金額。'
+      : linkedSettlements ? `刪除後無法復原，並會一併刪除 ${linkedSettlements} 筆還款或收款紀錄。` : '刪除後無法復原。';
   $('#confirm-delete').textContent = cancellingBatch ? '確認取消合併' : '確認刪除';
   $('#confirm-dialog').hidden = false;
   $('#cancel-delete').focus();
@@ -1061,14 +1096,21 @@ function initialiseEvents() {
   $('#add-transaction').addEventListener('click', () => openSheet());
   $('#close-sheet').addEventListener('click', closeSheet);
   $('#sheet-overlay').addEventListener('click', closeSheet);
-  $$('.type-switch__item').forEach((button) => button.addEventListener('click', () => { if (!state.form?.id) { applyTypeDefaults(state.form, button.dataset.type); $('#form-error').hidden = true; renderSheet(); } }));
-  $('#more-options').addEventListener('toggle', (event) => { if (state.form) state.form.moreOptionsExpanded = event.currentTarget.open; });
+  $$('.type-switch__item').forEach((button) => button.addEventListener('click', () => {
+    if (!state.form?.id) {
+      applyTypeDefaults(state.form, button.dataset.type);
+      if (button.dataset.type === 'debt') $('#more-options').open = true;
+      $('#form-error').hidden = true;
+      renderSheet();
+    }
+  }));
   $$('[data-debt-direction]').forEach((button) => button.addEventListener('click', () => {
     if (!state.form || !['expense', 'debt'].includes(state.form.type)) return;
     state.form.debtDirection = button.dataset.debtDirection || null;
     state.form.isPlannedClaim = false;
     state.form.reimbursementEnabled = false;
     state.form.moreOptionsExpanded = true;
+    $('#more-options').open = true;
     if (state.form.type === 'expense' && state.form.debtDirection && !state.form.debtAmountText) state.form.debtAmountText = state.form.amountText;
     renderSheet();
   }));
@@ -1104,6 +1146,12 @@ function initialiseEvents() {
   $('#toggle-date-time').addEventListener('click', () => { state.form.dateTimeExpanded = !state.form.dateTimeExpanded; $('#date-time-fields').hidden = !state.form.dateTimeExpanded; });
   $('#save-transaction').addEventListener('click', saveTransaction);
   $('#save-debt-settlement').addEventListener('click', saveDebtSettlement);
+  $('#fill-debt-remaining').addEventListener('click', () => {
+    const source = state.transactions.find((item) => item.id === state.form?.id);
+    if (!source) return;
+    $('#debt-settlement-amount').value = String(calculateDebtRemaining(source, state.transactions));
+    $('#debt-settlement-amount').focus();
+  });
   $('#delete-transaction').addEventListener('click', showDeleteConfirm);
   $('#cancel-delete').addEventListener('click', closeDeleteConfirm);
   $('#confirm-delete').addEventListener('click', deleteTransaction);

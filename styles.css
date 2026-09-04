@@ -217,7 +217,14 @@ textarea { padding: 11px; resize: vertical; }
 .debt-status-details .field-label strong { color: #f0ce8d; font-size: 13px; }
 .debt-settlement-history { display: grid; margin-bottom: 12px; }
 .debt-settlement-history button { display: flex; min-height: 42px; align-items: center; justify-content: space-between; border: 0; border-bottom: 1px solid rgba(255,255,255,.08); background: transparent; color: var(--text); }
+.debt-settlement-history button span, .debt-settlement-history button small { display: block; text-align: left; }
+.debt-settlement-history button small { margin-top: 2px; color: var(--muted); font-size: 10px; }
 .debt-settlement-history p { color: var(--muted); font-size: 12px; }
+.debt-fill-action { min-height: 40px; margin: 2px 0 10px; }
+.debt-settlement-summary { display: grid; gap: 8px; margin: 0 0 16px; padding: 12px; border: 1px solid #514735; border-radius: 14px; background: #252119; }
+.debt-settlement-summary p { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin: 0; }
+.debt-settlement-summary span { color: var(--muted); font-size: 12px; }
+.debt-settlement-summary strong { text-align: right; font-size: 13px; }
 .debt-overview { margin: 20px 0; }
 .debt-summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 .debt-summary-grid article { padding: 12px; border: 1px solid #514735; border-radius: 14px; background: #252119; }

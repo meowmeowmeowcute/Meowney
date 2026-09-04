@@ -44,6 +44,11 @@ export async function runStage8Tests() {
     assert(dataLayer.includes('createDebtSettlement') && dataLayer.includes('calculateDebtRemaining') && dataLayer.includes("transaction.type === 'debt-settlement'"), '借貸資料層缺少部分結清或餘額計算。');
     assert(queryLogic.includes("!['expense', 'income'].includes(transaction.type)") && queryLogic.includes("transaction.debtDirection === 'receivable'"), '借貸仍可能重複計入收入支出。');
     assert(app.includes('renderDebtOverview()') && app.includes('saveDebtSettlement') && css.includes('.more-options'), '借貸摘要、結清操作或精簡表單未接上。');
+    assert(html.includes('id="fill-debt-remaining"') && app.includes('借入後帳戶增加') && app.includes('借出後帳戶減少'), '獨立借貸缺少明確現金流說明或快速結清。');
+    assert(app.includes("button.dataset.type === 'debt') $('#more-options').open = true") && !app.includes("$('#more-options').addEventListener('toggle'"), '借貸欄位可能因展開狀態競爭而消失。');
+    assert(app.includes("transaction.type !== 'debt-settlement'") && app.includes('查看／刪除'), '結清紀錄仍可能重複顯示備註或缺少可理解的操作提示。');
+    assert(html.includes('id="debt-settlement-summary"') && app.includes("$('#number-pad').hidden = debtSettlementReadOnly") && app.includes("$('#more-options').hidden = debtSettlementReadOnly"), '結清明細仍顯示無法操作的交易輸入控制項。');
+    assert(app.includes("'借入待還'") && app.includes("'借出待收'"), '獨立借貸在紀錄或摘要仍使用容易混淆的消費欠款名稱。');
   });
   await test('報銷、備註優先與日期層級符合交易介面規則', async () => {
     const [app, html, css] = await Promise.all([read('app.js'), read('index.html'), read('styles.css')]);
@@ -83,7 +88,7 @@ export async function runStage8Tests() {
   });
   await test('已完成的合併報銷可一鍵取消並恢復原始待請款項目', async () => {
     const [app, html, dataLayer] = await Promise.all([read('app.js'), read('index.html'), read('data-layer.js')]);
-    assert(app.includes("batchReimbursement ? '取消合併報銷' : '刪除'") && html.includes('id="confirm-message"'), '合併報銷明細缺少明確的取消入口或影響說明。');
+    assert(app.includes("'取消合併報銷'") && app.includes("$('#delete-transaction').textContent") && html.includes('id="confirm-message"'), '合併報銷明細缺少明確的取消入口或影響說明。');
     assert(app.includes('確認取消合併') && app.includes('原始支出已恢復為預計請款'), '取消確認或完成提示不完整。');
     assert(dataLayer.includes("restorePlannedClaim ? { isPlannedClaim: true, claimBatchId: null, claimNote: null }"), '取消合併報銷沒有在資料層恢復預計請款狀態。');
   });

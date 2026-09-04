@@ -1,4 +1,4 @@
-import { DIRECT_EXPENSE_PARENT_CATEGORY_NAME } from './data-layer.js';
+import { DIRECT_EXPENSE_PARENT_CATEGORY_NAME } from './data-layer.js?v=29';
 
 export const BACKUP_FORMAT = 'meowney-backup';
 export const BACKUP_VERSION = 1;
