@@ -1,4 +1,4 @@
-import { DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js';
 import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js';
 import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js';
 
@@ -63,9 +63,11 @@ function toUiTransaction(transaction) {
 
 function transactionImpact(transaction, accountId) {
   if (transaction.type === 'income' && transaction.accountId === accountId) return transaction.amount;
-  if (transaction.type === 'expense' && transaction.accountId === accountId) return -transaction.amount;
+  if (transaction.type === 'expense' && transaction.accountId === accountId) return -(transaction.debtDirection === 'payable' ? transaction.amount - Number(transaction.debtAmount || 0) : transaction.amount);
   if (transaction.type === 'transfer' && transaction.sourceAccountId === accountId) return -transaction.amount;
   if (transaction.type === 'transfer' && transaction.targetAccountId === accountId) return transaction.amount;
+  if (transaction.type === 'debt' && transaction.accountId === accountId) return transaction.debtDirection === 'payable' ? transaction.amount : -transaction.amount;
+  if (transaction.type === 'debt-settlement' && transaction.accountId === accountId) return transaction.debtDirection === 'receivable' ? transaction.amount : -transaction.amount;
   return 0;
 }
 
@@ -134,6 +136,8 @@ function renderAccounts() {
 function transactionTitle(transaction) {
   if (transaction.isBatchReimbursement === true) return '合併請款';
   if (transaction.type === 'transfer') return '帳戶轉帳';
+  if (transaction.type === 'debt-settlement') return `${transaction.debtDirection === 'payable' ? '還款' : '收款'}：${transaction.note}`;
+  if (transaction.type === 'debt') return transaction.note;
   if (usesNoteAsPrimaryTitle(transaction)) return transaction.note;
   if (transaction.isReimbursement === true) return '報銷';
   if (transaction.type === 'income' && !transaction.categoryName) return '收入';
@@ -146,26 +150,34 @@ function transactionTitleMarkup(transaction) {
   const plannedClaimLabel = transaction.type === 'expense' && transaction.isPlannedClaim === true
     ? '<small class="transaction-kind transaction-kind--planned">預計請款</small>'
     : '';
+  const debtRemaining = transaction.debtDirection && transaction.type !== 'debt-settlement' ? calculateDebtRemaining(transaction, state.transactions) : null;
+  const debtLabel = debtRemaining !== null
+    ? `<small class="transaction-kind transaction-kind--debt">${transaction.debtDirection === 'payable' ? '我欠別人' : '別人欠我'} ${debtRemaining > 0 ? `(${transaction.debtDirection === 'payable' ? '-' : '+'}${currency(debtRemaining)})` : '（已結清）'}</small>`
+    : '';
   const titleClass = usesNoteAsPrimaryTitle(transaction)
     ? 'transaction-title--note'
-    : plannedClaimLabel ? 'transaction-title--with-kind' : '';
-  return `<b class="${titleClass}">${escapeHTML(transactionTitle(transaction))}${reimbursementLabel}${plannedClaimLabel}</b>`;
+    : plannedClaimLabel || debtLabel ? 'transaction-title--with-kind' : '';
+  return `<b class="${titleClass}">${escapeHTML(transactionTitle(transaction))}${reimbursementLabel}${plannedClaimLabel}${debtLabel}</b>`;
 }
 function usesNoteAsPrimaryTitle(transaction) {
   if (transaction.isBatchReimbursement === true) return false;
   return Boolean(transaction.note) && (
-    transaction.type === 'income'
+    transaction.type === 'income' || transaction.type === 'debt'
     || (transaction.type === 'expense' && transaction.isDirectParentExpense === true && transaction.parentName === DIRECT_EXPENSE_PARENT_CATEGORY_NAME)
   );
 }
-function transactionIcon(transaction) { return transaction.type === 'expense' ? '↗' : transaction.type === 'income' ? '↙' : '⇄'; }
+function transactionIcon(transaction) { return transaction.type === 'expense' ? '↗' : transaction.type === 'income' ? '↙' : transaction.type === 'transfer' ? '⇄' : '⇆'; }
 function transactionAmountText(transaction) {
   if (transaction.type === 'expense') return `-${currency(transaction.amount)}`;
   if (transaction.type === 'income') return `+${currency(transaction.amount)}`;
+  if (transaction.type === 'debt') return `${transaction.debtDirection === 'payable' ? '+' : '-'}${currency(transaction.amount)}`;
+  if (transaction.type === 'debt-settlement') return `${transaction.debtDirection === 'receivable' ? '+' : '-'}${currency(transaction.amount)}`;
   return currency(transaction.amount);
 }
 function transactionMeta(transaction) {
   if (transaction.type === 'transfer') return `${transaction.sourceAccountName} → ${transaction.targetAccountName} · ${transaction.time}`;
+  if (transaction.type === 'debt') return `${transaction.debtDirection === 'payable' ? '借入' : '借出'} · ${transaction.accountName} · ${transaction.time}`;
+  if (transaction.type === 'debt-settlement') return `${transaction.debtDirection === 'payable' ? '還款' : '收款'} · ${transaction.accountName} · ${transaction.time}`;
   if (transaction.type === 'income' && !transaction.parentName) return `${transaction.accountName} · ${transaction.time}`;
   return `${transaction.parentName} · ${transaction.accountName} · ${transaction.time}`;
 }
@@ -268,6 +280,7 @@ function renderTransactions() {
   $('#open-batch-reimbursement').textContent = `合併報銷 ${plannedClaims.length}`;
   $('#records-title').textContent = selectedAccount ? selectedAccount.name : '全部';
   $('#transaction-count').textContent = selectedAccount ? `${transactions.length} 筆 · 再點帳戶顯示全部` : `${transactions.length} 筆 · 所有帳戶`;
+  renderDebtOverview();
   if (!transactions.length) {
     $('#transaction-list').innerHTML = `<div class="empty-state">${selectedAccount ? `${escapeHTML(selectedAccount.name)}目前沒有交易紀錄。` : '尚無交易，點選「記帳」新增第一筆。'}</div>`;
     return;
@@ -290,6 +303,26 @@ function renderTransactions() {
     </section>`;
   }).join('');
   $$('[data-edit-id]').forEach((button) => button.addEventListener('click', () => openSheet(button.dataset.editId)));
+}
+
+function debtSources() {
+  return state.transactions.filter((transaction) => ['expense', 'debt'].includes(transaction.type) && transaction.debtDirection && calculateDebtRemaining(transaction, state.transactions) > 0);
+}
+
+function renderDebtOverview() {
+  const sources = debtSources();
+  $('#debt-overview').hidden = sources.length === 0;
+  if (!sources.length) return;
+  const payable = sources.filter((item) => item.debtDirection === 'payable').reduce((sum, item) => sum + calculateDebtRemaining(item, state.transactions), 0);
+  const receivable = sources.filter((item) => item.debtDirection === 'receivable').reduce((sum, item) => sum + calculateDebtRemaining(item, state.transactions), 0);
+  $('#debt-overview-count').textContent = `${sources.length} 筆未結清`;
+  $('#payable-total').textContent = `(-${currency(payable)})`;
+  $('#receivable-total').textContent = `(+${currency(receivable)})`;
+  $('#debt-overview-list').innerHTML = sources.map((source) => {
+    const remaining = calculateDebtRemaining(source, state.transactions);
+    return `<button type="button" data-open-debt="${source.id}"><span><b>${escapeHTML(source.note)}</b><small>${source.debtDirection === 'payable' ? '我欠別人' : '別人欠我'} · ${escapeHTML(source.accountName)}</small></span><strong>${source.debtDirection === 'payable' ? '-' : '+'}${currency(remaining)}</strong></button>`;
+  }).join('');
+  $$('[data-open-debt]').forEach((button) => button.addEventListener('click', () => openSheet(button.dataset.openDebt)));
 }
 
 function renderSettings() {
@@ -321,6 +354,11 @@ function applyTypeDefaults(form, type) {
   const saved = state.transactionDefaults[type] || {};
   const preferredAccountId = validAccountId(state.selectedAccountId) || validAccountId(saved.accountId) || (state.accounts.length === 1 ? state.accounts[0].id : null);
   form.type = type;
+  form.debtDirection = type === 'debt' ? (form.debtDirection || 'payable') : null;
+  form.debtAmountText = '';
+  form.isPlannedClaim = false;
+  form.reimbursementEnabled = false;
+  if (type === 'debt') form.moreOptionsExpanded = true;
   if (type === 'transfer') {
     form.accountId = null;
     form.parentId = null;
@@ -342,7 +380,7 @@ function applyTypeDefaults(form, type) {
 }
 
 function createBlankForm() {
-  const form = { id: null, type: 'expense', amountText: '', accountId: null, parentId: null, categoryId: null, sourceAccountId: null, targetAccountId: null, note: '', isPlannedClaim: false, reimbursementEnabled: false, reimbursementAmountText: '', reimbursementAmountTouched: false, reimbursementNote: '', reimbursementNoteTouched: false, isReimbursement: false, isBatchReimbursement: false, reimbursementExpenseIds: [], reimbursementBatchNote: '', date: todayValue(), time: timeValue(), dateTimeExpanded: false };
+  const form = { id: null, type: 'expense', amountText: '', accountId: null, parentId: null, categoryId: null, sourceAccountId: null, targetAccountId: null, note: '', debtDirection: null, debtAmountText: '', debtAmountTouched: false, settlementAccountId: null, isDebtSettlement: false, debtSourceId: null, isPlannedClaim: false, reimbursementEnabled: false, reimbursementAmountText: '', reimbursementAmountTouched: false, reimbursementNote: '', reimbursementNoteTouched: false, isReimbursement: false, isBatchReimbursement: false, reimbursementExpenseIds: [], reimbursementBatchNote: '', date: todayValue(), time: timeValue(), dateTimeExpanded: false, moreOptionsExpanded: false };
   return applyTypeDefaults(form, 'expense');
 }
 
@@ -367,6 +405,12 @@ function formFromTransaction(transaction) {
     sourceAccountId: transaction.sourceAccountId || null,
     targetAccountId: transaction.targetAccountId || null,
     note: transaction.note || '',
+    debtDirection: transaction.debtDirection || null,
+    debtAmountText: transaction.debtAmount ? String(transaction.debtAmount) : '',
+    debtAmountTouched: Boolean(transaction.debtAmount),
+    settlementAccountId: transaction.accountId || null,
+    isDebtSettlement: transaction.isDebtSettlement === true,
+    debtSourceId: transaction.debtSourceId || null,
     isPlannedClaim: transaction.isPlannedClaim === true,
     claimBatchId: transaction.claimBatchId || null,
     claimNote: transaction.claimNote || '',
@@ -382,6 +426,7 @@ function formFromTransaction(transaction) {
     date: transaction.date,
     time: transaction.time,
     dateTimeExpanded: false,
+    moreOptionsExpanded: Boolean(transaction.note || transaction.debtDirection || transaction.isReimbursement || transaction.isPlannedClaim),
   };
 }
 
@@ -425,6 +470,7 @@ function renderSheet() {
   const form = state.form;
   if (!form) return;
   const reimbursementReadOnly = form.isReimbursement === true;
+  const debtSettlementReadOnly = form.isDebtSettlement === true;
   const batchReimbursementReadOnly = reimbursementReadOnly && form.isBatchReimbursement === true;
   const batchReimbursementSource = !reimbursementReadOnly && form.isBatchReimbursement === true;
   $$('.type-switch__item').forEach((button) => {
@@ -432,10 +478,11 @@ function renderSheet() {
     button.disabled = Boolean(form.id);
   });
   $('#amount-display').textContent = currency(Number(form.amountText) || 0);
+  $('#more-options').open = form.moreOptionsExpanded;
   $('#category-section').hidden = form.type !== 'expense';
-  $('#single-account-section').hidden = form.type === 'transfer' || reimbursementReadOnly;
+  $('#single-account-section').hidden = form.type === 'transfer' || reimbursementReadOnly || debtSettlementReadOnly;
   $('#transfer-account-section').hidden = form.type !== 'transfer';
-  $('#planned-claim-section').hidden = form.type !== 'expense' || reimbursementReadOnly || batchReimbursementSource;
+  $('#planned-claim-section').hidden = form.type !== 'expense' || reimbursementReadOnly || batchReimbursementSource || Boolean(form.debtDirection);
   $('#claim-submitted-info').hidden = !batchReimbursementSource && !batchReimbursementReadOnly;
   $('#claim-submitted-info').textContent = batchReimbursementSource
     ? '此筆已包含在合併報銷中；修改金額或備註後，合併報銷的金額與項目清單會同步更新。'
@@ -444,7 +491,20 @@ function renderSheet() {
   $('#batch-reimbursement-note').hidden = !batchReimbursementReadOnly || !form.reimbursementBatchNote;
   $('#batch-reimbursement-note').textContent = form.reimbursementBatchNote ? `共用備註：${form.reimbursementBatchNote}` : '';
   $('#batch-reimbursement-items').innerHTML = batchReimbursementReadOnly ? batchReimbursementItemsMarkup(form) : '';
-  $('#reimbursement-section').hidden = form.type !== 'expense' || reimbursementReadOnly || batchReimbursementSource;
+  $('#reimbursement-section').hidden = form.type !== 'expense' || reimbursementReadOnly || batchReimbursementSource || Boolean(form.debtDirection);
+  $('#debt-section').hidden = !['expense', 'debt'].includes(form.type) || reimbursementReadOnly || batchReimbursementSource;
+  $('#debt-guidance').textContent = form.type === 'debt' ? '不連結消費，只記錄借入或借出' : '可只登記支出中的部分金額';
+  $('[data-debt-direction=""]').hidden = form.type === 'debt';
+  const hasDebtSettlements = Boolean(form.id && state.transactions.some((item) => item.type === 'debt-settlement' && item.debtSourceId === form.id));
+  $$('[data-debt-direction]').forEach((button) => {
+    button.classList.toggle('chip--active', button.dataset.debtDirection === (form.debtDirection || ''));
+    button.disabled = hasDebtSettlements;
+  });
+  $('#debt-amount-field').hidden = form.type !== 'expense' || !form.debtDirection;
+  $('#debt-amount-input').value = form.debtAmountText;
+  const debtAmount = form.type === 'debt' ? Number(form.amountText || 0) : Number(form.debtAmountText || 0);
+  $('#debt-impact').hidden = !form.debtDirection || debtAmount <= 0;
+  $('#debt-impact').textContent = form.debtDirection === 'payable' ? `帳戶目前少付 ${currency(debtAmount)}，待還款。` : `對方待還 ${currency(debtAmount)}，收款時再回到帳戶。`;
   $('#planned-claim-toggle').setAttribute('aria-pressed', String(form.isPlannedClaim));
   $('#planned-claim-toggle').classList.toggle('reimbursement-toggle--active', form.isPlannedClaim);
   $('#planned-claim-toggle-status').textContent = form.isPlannedClaim ? '可在查詢中查看尚未請款的支出' : '報銷後會自動取消這個標記';
@@ -456,17 +516,17 @@ function renderSheet() {
   $('#reimbursement-amount-input').value = form.reimbursementAmountText;
   $('#reimbursement-note-field').hidden = !form.reimbursementEnabled || form.type !== 'expense' || reimbursementReadOnly;
   $('#reimbursement-note-input').value = form.reimbursementNote;
-  $('#note-field-label').textContent = reimbursementReadOnly ? '報銷備註（選填）' : '備註（選填）';
+  $('#note-field-label').textContent = reimbursementReadOnly ? '報銷備註（選填）' : form.debtDirection ? `${form.type === 'debt' ? '借貸' : '欠款'}對象／備註（必填）` : '備註（選填）';
   $('#transaction-note-field').hidden = batchReimbursementReadOnly;
   $('#note-input').value = form.note;
-  $('#note-input').disabled = batchReimbursementReadOnly;
+  $('#note-input').disabled = batchReimbursementReadOnly || debtSettlementReadOnly;
   $('#date-input').value = form.date;
   $('#time-input').value = form.time;
-  $('#toggle-date-time').hidden = reimbursementReadOnly;
-  $('#date-time-fields').hidden = reimbursementReadOnly || !form.dateTimeExpanded;
+  $('#toggle-date-time').hidden = reimbursementReadOnly || debtSettlementReadOnly;
+  $('#date-time-fields').hidden = reimbursementReadOnly || debtSettlementReadOnly || !form.dateTimeExpanded;
   $('#date-time-summary').textContent = `${form.date.replaceAll('-', '/')} ${form.time}`;
-  $$('.number-pad button').forEach((button) => { button.disabled = batchReimbursementReadOnly; });
-  $('#save-transaction').disabled = batchReimbursementReadOnly;
+  $$('.number-pad button').forEach((button) => { button.disabled = batchReimbursementReadOnly || debtSettlementReadOnly; });
+  $('#save-transaction').disabled = batchReimbursementReadOnly || debtSettlementReadOnly;
   $('#parent-options').innerHTML = state.categories.map((parent) => `<button type="button" class="parent-tab ${parent.id === form.parentId ? 'parent-tab--active' : ''}" data-parent-id="${parent.id}" aria-pressed="${parent.id === form.parentId}">${escapeHTML(parent.name)}</button>`).join('');
   const parent = selectedParent();
   $('#category-guidance').textContent = parent?.allowsDirectExpense ? '「其他」不需要子類別' : '先選母類別，再選子類別';
@@ -479,11 +539,22 @@ function renderSheet() {
   $('#account-options').innerHTML = accountChips('data-account-id', form.accountId);
   $('#source-account-options').innerHTML = accountChips('data-source-account-id', form.sourceAccountId, form.targetAccountId);
   $('#target-account-options').innerHTML = accountChips('data-target-account-id', form.targetAccountId, form.sourceAccountId);
+  const source = form.debtDirection && !debtSettlementReadOnly ? state.transactions.find((item) => item.id === form.id) : null;
+  const settlements = source ? state.transactions.filter((item) => item.type === 'debt-settlement' && item.debtSourceId === source.id).sort(byDateTime) : [];
+  const remaining = source ? calculateDebtRemaining(source, state.transactions) : 0;
+  $('#debt-status-details').hidden = !source;
+  $('#debt-remaining').textContent = source ? `未結清 ${currency(remaining)}` : '';
+  $('#debt-settlement-history').innerHTML = settlements.length ? settlements.map((item) => `<button type="button" data-edit-settlement="${item.id}"><span>${item.debtDirection === 'payable' ? '已還款' : '已收款'} · ${item.date}</span><strong>${currency(item.amount)}</strong></button>`).join('') : '<p>尚無還款或收款紀錄。</p>';
+  $('#debt-settlement-accounts').innerHTML = accountChips('data-settlement-account-id', form.settlementAccountId);
+  $('#save-debt-settlement').disabled = remaining <= 0;
+  $('#save-debt-settlement').textContent = remaining <= 0 ? '已結清' : form.debtDirection === 'payable' ? '登記還款' : '登記收款';
   $$('[data-parent-id]').forEach((button) => button.addEventListener('click', () => { form.parentId = button.dataset.parentId; form.categoryId = null; renderSheet(); }));
   $$('[data-category-id]').forEach((button) => button.addEventListener('click', () => { form.categoryId = button.dataset.categoryId; renderSheet(); }));
   $$('[data-account-id]').forEach((button) => button.addEventListener('click', () => { form.accountId = button.dataset.accountId; renderSheet(); }));
   $$('[data-source-account-id]').forEach((button) => button.addEventListener('click', () => { form.sourceAccountId = button.dataset.sourceAccountId; renderSheet(); }));
   $$('[data-target-account-id]').forEach((button) => button.addEventListener('click', () => { form.targetAccountId = button.dataset.targetAccountId; renderSheet(); }));
+  $$('[data-settlement-account-id]').forEach((button) => button.addEventListener('click', () => { form.settlementAccountId = button.dataset.settlementAccountId; renderSheet(); }));
+  $$('[data-edit-settlement]').forEach((button) => button.addEventListener('click', () => openSheet(button.dataset.editSettlement)));
 }
 
 function appendAmount(key) {
@@ -496,6 +567,10 @@ function appendAmount(key) {
     state.form.reimbursementAmountText = state.form.amountText;
     $('#reimbursement-amount-input').value = state.form.reimbursementAmountText;
   }
+  if (state.form.type === 'expense' && state.form.debtDirection && !state.form.debtAmountTouched) {
+    state.form.debtAmountText = state.form.amountText;
+    $('#debt-amount-input').value = state.form.debtAmountText;
+  }
 }
 
 function validationError() {
@@ -503,6 +578,8 @@ function validationError() {
   if (form.isReimbursement && form.isBatchReimbursement) return { message: '合併報銷的金額與項目清單由已包含的支出自動產生。', selector: '#batch-reimbursement-details' };
   if (!Number.isFinite(Number(form.amountText)) || Number(form.amountText) <= 0) return { message: '請輸入大於 0 的金額。', selector: '.number-pad', focusSelector: '.number-pad button' };
   if (form.type === 'expense' && form.reimbursementEnabled && (!Number.isFinite(Number(form.reimbursementAmountText)) || Number(form.reimbursementAmountText) <= 0)) return { message: '請輸入大於 0 的報銷金額。', selector: '#reimbursement-amount-field', focusSelector: '#reimbursement-amount-input' };
+  if (form.debtDirection && !form.note.trim()) return { message: '請在備註填寫借貸對象。', selector: '#transaction-note-field', focusSelector: '#note-input' };
+  if (form.type === 'expense' && form.debtDirection && (!Number.isFinite(Number(form.debtAmountText)) || Number(form.debtAmountText) <= 0 || Number(form.debtAmountText) > Number(form.amountText))) return { message: '欠款金額必須大於 0，且不可超過支出金額。', selector: '#debt-amount-field', focusSelector: '#debt-amount-input' };
   if (!form.date || !form.time) return { message: '請選擇完整的日期與時間。', selector: '#toggle-date-time', focusSelector: '#toggle-date-time' };
   if (form.type === 'transfer') {
     if (!form.sourceAccountId || !form.targetAccountId) return { message: '請選擇來源帳戶與目的帳戶。', selector: '#transfer-account-section', focusSelector: '#transfer-account-section button:not([disabled])' };
@@ -521,7 +598,23 @@ function transactionInputFromForm() {
     return { type: form.type, amount: Number(form.amountText), sourceAccountId: form.sourceAccountId, targetAccountId: form.targetAccountId, note: form.note.trim(), date: form.date, time: form.time };
   }
   const input = { type: form.type, amount: Number(form.amountText), accountId: form.accountId, note: form.note.trim(), date: form.date, time: form.time };
-  return form.type === 'expense' ? { ...input, parentCategoryId: form.parentId, subcategoryId: form.categoryId, isPlannedClaim: form.isPlannedClaim } : input;
+  return form.type === 'expense' ? { ...input, parentCategoryId: form.parentId, subcategoryId: form.categoryId, isPlannedClaim: form.isPlannedClaim, debtDirection: form.debtDirection, debtAmount: form.debtDirection ? Number(form.debtAmountText) : null } : form.type === 'debt' ? { ...input, debtDirection: form.debtDirection } : input;
+}
+
+async function saveDebtSettlement() {
+  const source = state.transactions.find((item) => item.id === state.form?.id);
+  const amount = Number($('#debt-settlement-amount').value);
+  if (!source || !Number.isFinite(amount) || amount <= 0) return showFormError('請輸入大於 0 的還款或收款金額。', { selector: '#debt-status-details', focusSelector: '#debt-settlement-amount' });
+  if (!state.form.settlementAccountId) return showFormError('請選擇還款或收款帳戶。', { selector: '#debt-status-details', focusSelector: '#debt-settlement-accounts button' });
+  try {
+    await state.repository.createDebtSettlement(source.id, { amount, accountId: state.form.settlementAccountId, date: todayValue(), time: timeValue(), note: source.note });
+    await loadData();
+    state.form = formFromTransaction(state.transactions.find((item) => item.id === source.id));
+    render();
+    renderSheet();
+    $('#debt-settlement-amount').value = '';
+    showToast(source.debtDirection === 'payable' ? '已登記還款。' : '已登記收款。');
+  } catch (error) { showFormError(error.message || '登記時發生問題，請重試。'); }
 }
 
 async function saveTransaction() {
@@ -562,10 +655,12 @@ function showDeleteConfirm({ updateHistory = true } = {}) {
   if (updateHistory) history.pushState({ meowney: true, page: state.activePage, view: 'confirm', editingId: state.editingId }, '');
   const cancellingBatch = state.form?.isReimbursement === true && state.form?.isBatchReimbursement === true;
   const sourceCount = state.form?.reimbursementExpenseIds?.length || 0;
+  const linkedSettlements = state.form?.debtDirection && !state.form?.isDebtSettlement
+    ? state.transactions.filter((item) => item.type === 'debt-settlement' && item.debtSourceId === state.form.id).length : 0;
   $('#confirm-title').textContent = cancellingBatch ? '取消這筆合併報銷？' : '刪除這筆交易？';
   $('#confirm-message').textContent = cancellingBatch
     ? `將刪除這筆報銷收入，並把 ${sourceCount} 筆原始支出恢復為預計請款。`
-    : '刪除後無法復原。';
+    : linkedSettlements ? `刪除後無法復原，並會一併刪除 ${linkedSettlements} 筆還款或收款紀錄。` : '刪除後無法復原。';
   $('#confirm-delete').textContent = cancellingBatch ? '確認取消合併' : '確認刪除';
   $('#confirm-dialog').hidden = false;
   $('#cancel-delete').focus();
@@ -967,6 +1062,16 @@ function initialiseEvents() {
   $('#close-sheet').addEventListener('click', closeSheet);
   $('#sheet-overlay').addEventListener('click', closeSheet);
   $$('.type-switch__item').forEach((button) => button.addEventListener('click', () => { if (!state.form?.id) { applyTypeDefaults(state.form, button.dataset.type); $('#form-error').hidden = true; renderSheet(); } }));
+  $('#more-options').addEventListener('toggle', (event) => { if (state.form) state.form.moreOptionsExpanded = event.currentTarget.open; });
+  $$('[data-debt-direction]').forEach((button) => button.addEventListener('click', () => {
+    if (!state.form || !['expense', 'debt'].includes(state.form.type)) return;
+    state.form.debtDirection = button.dataset.debtDirection || null;
+    state.form.isPlannedClaim = false;
+    state.form.reimbursementEnabled = false;
+    state.form.moreOptionsExpanded = true;
+    if (state.form.type === 'expense' && state.form.debtDirection && !state.form.debtAmountText) state.form.debtAmountText = state.form.amountText;
+    renderSheet();
+  }));
   $$('.number-pad button').forEach((button) => button.addEventListener('click', () => appendAmount(button.dataset.key)));
   $('#note-input').addEventListener('input', (event) => {
     state.form.note = event.target.value;
@@ -992,11 +1097,13 @@ function initialiseEvents() {
     state.form.reimbursementAmountText = event.target.value;
     state.form.reimbursementAmountTouched = true;
   });
+  $('#debt-amount-input').addEventListener('input', (event) => { state.form.debtAmountText = event.target.value; state.form.debtAmountTouched = true; });
   $('#reimbursement-note-input').addEventListener('input', (event) => { state.form.reimbursementNote = event.target.value; state.form.reimbursementNoteTouched = true; });
   $('#date-input').addEventListener('input', (event) => { state.form.date = event.target.value; $('#date-time-summary').textContent = `${state.form.date.replaceAll('-', '/')} ${state.form.time}`; });
   $('#time-input').addEventListener('input', (event) => { state.form.time = event.target.value; $('#date-time-summary').textContent = `${state.form.date.replaceAll('-', '/')} ${state.form.time}`; });
   $('#toggle-date-time').addEventListener('click', () => { state.form.dateTimeExpanded = !state.form.dateTimeExpanded; $('#date-time-fields').hidden = !state.form.dateTimeExpanded; });
   $('#save-transaction').addEventListener('click', saveTransaction);
+  $('#save-debt-settlement').addEventListener('click', saveDebtSettlement);
   $('#delete-transaction').addEventListener('click', showDeleteConfirm);
   $('#cancel-delete').addEventListener('click', closeDeleteConfirm);
   $('#confirm-delete').addEventListener('click', deleteTransaction);

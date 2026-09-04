@@ -3,6 +3,7 @@ import {
   DataValidationError,
   MeowneyRepository,
   calculateAccountBalances,
+  calculateDebtRemaining,
   deleteDatabase,
 } from '../data-layer.js';
 
@@ -116,6 +117,33 @@ export async function runStage2Tests() {
       await repository.deleteTransaction(created.expense.id);
       const remaining = await repository.listTransactions();
       assert(!remaining.some((transaction) => transaction.id === created.expense.id || transaction.id === created.reimbursement.id), '刪除原支出沒有一併刪除連動報銷。');
+    });
+
+    await test('消費欠款與獨立借貸可部分結清且不會超額', async () => {
+      const startingCash = await repository.getAccountBalance(cash.id);
+      const payableExpense = await repository.createTransaction({ type: 'expense', amount: 300, debtDirection: 'payable', debtAmount: 200, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '小明', date: '2026-08-25', time: '10:00' });
+      assert(await repository.getAccountBalance(cash.id) === startingCash - 100, '部分欠款支出應只先扣已付款部分。');
+      await repository.createDebtSettlement(payableExpense.id, { amount: 80, accountId: cash.id, date: '2026-08-25', time: '11:00' });
+      let transactions = await repository.listTransactions();
+      assert(calculateDebtRemaining(payableExpense, transactions) === 120 && await repository.getAccountBalance(cash.id) === startingCash - 180, '部分還款未正確更新未結清金額或帳戶。');
+      await rejects(() => repository.createDebtSettlement(payableExpense.id, { amount: 121, accountId: cash.id, date: '2026-08-25', time: '11:10' }), DataValidationError);
+
+      const receivableExpense = await repository.createTransaction({ type: 'expense', amount: 300, debtDirection: 'receivable', debtAmount: 200, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '小華', date: '2026-08-25', time: '12:00' });
+      await repository.createDebtSettlement(receivableExpense.id, { amount: 50, accountId: cash.id, date: '2026-08-25', time: '12:10' });
+      transactions = await repository.listTransactions();
+      assert(calculateDebtRemaining(receivableExpense, transactions) === 150, '部分收款未正確更新待收金額。');
+
+      const borrowed = await repository.createTransaction({ type: 'debt', amount: 100, debtDirection: 'payable', accountId: cash.id, note: '向同學借錢', date: '2026-08-26', time: '09:00' });
+      const lent = await repository.createTransaction({ type: 'debt', amount: 120, debtDirection: 'receivable', accountId: cash.id, note: '借給同學', date: '2026-08-26', time: '09:10' });
+      await repository.createDebtSettlement(borrowed.id, { amount: 40, accountId: cash.id, date: '2026-08-26', time: '10:00' });
+      await repository.createDebtSettlement(lent.id, { amount: 20, accountId: cash.id, date: '2026-08-26', time: '10:10' });
+      transactions = await repository.listTransactions();
+      assert(calculateDebtRemaining(borrowed, transactions) === 60 && calculateDebtRemaining(lent, transactions) === 100, '獨立借入或借出的部分結清計算錯誤。');
+      await rejects(() => repository.updateTransaction(borrowed.id, { debtDirection: 'receivable' }), DataValidationError);
+      await rejects(() => repository.updateExpenseWithReimbursement(payableExpense.id, { debtDirection: null, debtAmount: null }, { enabled: false }), DataValidationError);
+      await repository.deleteTransaction(borrowed.id);
+      transactions = await repository.listTransactions();
+      assert(!transactions.some((item) => item.id === borrowed.id || item.debtSourceId === borrowed.id), '刪除借貸來源沒有一併刪除結清紀錄。');
     });
 
     await test('刪除帳戶與子類別後，歷史交易保留名稱快照', async () => {

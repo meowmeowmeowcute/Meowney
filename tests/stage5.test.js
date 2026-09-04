@@ -81,6 +81,16 @@ export async function runStage5Tests() {
       assert(breakdown.totalExpense === 40 && summary.totalExpense === 40, '部分報銷差額沒有正確計入類別統計。');
     });
 
+    await test('借貸不重複計入收支，代墊支出只計自己的部分', async () => {
+      const payableExpense = { id: 'debt-expense-payable', type: 'expense', amount: 300, debtDirection: 'payable', debtAmount: 200, parentCategoryId: food.id, subcategoryId: meal.id, date: '2026-08-24', time: '15:00' };
+      const receivableExpense = { id: 'debt-expense-receivable', type: 'expense', amount: 300, debtDirection: 'receivable', debtAmount: 200, parentCategoryId: food.id, subcategoryId: meal.id, date: '2026-08-24', time: '15:10' };
+      const debt = { id: 'debt-source', type: 'debt', amount: 500, debtDirection: 'payable', debtAmount: 500, date: '2026-08-24', time: '15:20' };
+      const settlement = { id: 'debt-settlement', type: 'debt-settlement', amount: 100, debtDirection: 'payable', debtSourceId: debt.id, date: '2026-08-24', time: '15:30' };
+      const query = runTransactionQuery([payableExpense, receivableExpense, debt, settlement], {}, now);
+      assert(query.count === 2 && query.expenseTotal === 400 && query.incomeTotal === 0, '借貸或結清被計入收支，或代墊支出未扣除待收部分。');
+      assert(parentCategoryBreakdown(query.results, food.id).totalExpense === 400, '欠款支出的類別統計口徑錯誤。');
+    });
+
     await test('今天、本月、特定日期與特定月份的日期邊界正確', async () => {
       const today = runTransactionQuery(transactions, { dateMode: 'today' }, now);
       const month = runTransactionQuery(transactions, { dateMode: 'month' }, now);

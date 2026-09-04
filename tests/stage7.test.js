@@ -185,6 +185,30 @@ export async function runStage7Tests() {
       invalidBackup.data.transactions.find((transaction) => transaction.id === batchReimbursement.id).amount += 1;
       assert(!validateBackup(invalidBackup).valid, '合併報銷金額不一致的 JSON 被錯誤接受。');
     });
+
+    await test('獨立借貸與部分結清可安全匯出及匯入 JSON、CSV', async () => {
+      const debtTargetName = `meowney-stage7-debt-${crypto.randomUUID()}`;
+      let debtTarget;
+      try {
+        const debt = await source.createTransaction({ type: 'debt', amount: 500, debtDirection: 'receivable', accountId: cash.id, note: '借給同學', date: '2026-08-27', time: '10:00' });
+        const settlement = await source.createDebtSettlement(debt.id, { amount: 120, accountId: bank.id, date: '2026-08-28', time: '11:00' });
+        const latestSnapshot = await source.getSnapshot();
+        assert(validateBackup(createBackup(latestSnapshot)).valid, '含借貸的 JSON 備份未通過驗證。');
+        const csv = exportTransactionsCsv([debt, settlement]);
+        assert(validateCsvImport(csv).valid, '含借貸的 CSV 未通過驗證。');
+        debtTarget = await MeowneyRepository.open({ databaseName: debtTargetName });
+        const plan = planCsvImport(csv, await debtTarget.getSnapshot());
+        assert(plan.valid, '含借貸的 CSV 無法建立匯入計畫。');
+        await debtTarget.importCsvPlan(plan.plan);
+        const imported = await debtTarget.listTransactions();
+        assert(imported.length === 2 && imported.some((item) => item.debtSourceId === debt.id), '借貸來源與部分結清關聯未完整匯入。');
+        const repeated = planCsvImport(csv, await debtTarget.getSnapshot());
+        assert(repeated.valid && repeated.summary.skippedTransactions === 2 && repeated.summary.newTransactions === 0, '重複匯入相同借貸 CSV 未安全略過。');
+      } finally {
+        debtTarget?.close();
+        await deleteDatabase(debtTargetName);
+      }
+    });
   } finally {
     source?.close();
     target?.close();

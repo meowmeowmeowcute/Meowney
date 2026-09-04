@@ -35,8 +35,15 @@ export async function runStage8Tests() {
     assert(app.includes("selectedParent()?.allowsDirectExpense"), '其他類別沒有正確略過子類別驗證。');
     assert(app.includes('transactionNoteMarkup(transaction)'), '交易紀錄未輸出備註。');
     assert(html.includes('id="category-guidance"'), '其他類別缺少免子類別提示。');
-    assert(app.includes("return form.type === 'expense' ? { ...input, parentCategoryId: form.parentId, subcategoryId: form.categoryId, isPlannedClaim: form.isPlannedClaim } : input;"), '收入表單仍送出類別關聯。');
+    assert(app.includes("form.type === 'expense' ? { ...input, parentCategoryId: form.parentId, subcategoryId: form.categoryId") && app.includes("form.type === 'debt' ? { ...input, debtDirection: form.debtDirection } : input"), '收入表單仍送出類別關聯，或借貸表單未獨立處理。');
     assert(/\.amount-section\s*\{[^}]*position:\s*sticky/.test(css) && /\.transaction-note\s*\{[^}]*white-space:\s*pre-wrap/.test(css), '金額區或完整備註顯示樣式缺失。');
+  });
+  await test('借貸支援消費欠款、獨立借貸、部分結清與手機快速操作', async () => {
+    const [app, html, dataLayer, queryLogic, css] = await Promise.all([read('app.js'), read('index.html'), read('data-layer.js'), read('query-logic.js'), read('styles.css')]);
+    assert(html.includes('data-type="debt"') && html.includes('id="debt-section"') && html.includes('id="debt-status-details"') && html.includes('id="debt-overview"'), '借貸新增、結清或未結清摘要入口不完整。');
+    assert(dataLayer.includes('createDebtSettlement') && dataLayer.includes('calculateDebtRemaining') && dataLayer.includes("transaction.type === 'debt-settlement'"), '借貸資料層缺少部分結清或餘額計算。');
+    assert(queryLogic.includes("!['expense', 'income'].includes(transaction.type)") && queryLogic.includes("transaction.debtDirection === 'receivable'"), '借貸仍可能重複計入收入支出。');
+    assert(app.includes('renderDebtOverview()') && app.includes('saveDebtSettlement') && css.includes('.more-options'), '借貸摘要、結清操作或精簡表單未接上。');
   });
   await test('報銷、備註優先與日期層級符合交易介面規則', async () => {
     const [app, html, css] = await Promise.all([read('app.js'), read('index.html'), read('styles.css')]);

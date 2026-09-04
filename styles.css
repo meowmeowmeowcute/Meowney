@@ -69,6 +69,7 @@ h3 em { color: var(--muted); font-size: 12px; font-style: normal; font-weight: 5
 .transaction-details b.transaction-title--note, .transaction-details b.transaction-title--with-kind { overflow: visible; text-overflow: clip; white-space: pre-wrap; line-height: 1.35; overflow-wrap: anywhere; }
 .transaction-title--note .transaction-kind, .transaction-title--with-kind .transaction-kind { display: inline; margin-left: 7px; color: var(--muted); font-size: 11px; font-weight: 650; letter-spacing: 0; white-space: nowrap; }
 .transaction-kind--planned { color: #e8bd6a !important; }
+.transaction-kind--debt { color: #efc981 !important; }
 .transaction-details span { margin-top: 3px; color: var(--muted); font-size: 11px; }
 .transaction-note { display: block; margin-top: 4px; color: #c7d0cc; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; white-space: pre-wrap; }
 .transaction-amount { align-self: center; font-size: 17px; font-weight: 800; letter-spacing: -.02em; white-space: nowrap; }
@@ -178,13 +179,13 @@ textarea { padding: 11px; resize: vertical; }
 .sheet-header h2 { margin: 0; font-size: 23px; }
 .icon-button { display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid #497466; border-radius: 50%; background: #23352f; color: var(--accent); font-size: 30px; line-height: 1; }
 .sheet-body { min-height: 0; flex: 1; overflow-y: auto; padding: 6px 18px 22px; overscroll-behavior: contain; }
-.type-switch { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; padding: 5px; border-radius: 15px; background: #090c0d; }
+.type-switch { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; padding: 5px; border-radius: 15px; background: #090c0d; }
 .type-switch__item { min-height: 42px; border: 0; border-radius: 11px; background: transparent; color: var(--muted); font-size: 15px; font-weight: 800; }
 .type-switch__item--active { background: #454a4c; color: var(--text); box-shadow: 0 2px 4px rgba(0, 0, 0, .28); }
-.amount-section { position: sticky; top: 0; z-index: 2; display: grid; justify-items: center; gap: 6px; margin: 0 -18px 19px; padding: 17px 18px 13px; background: #171a1c; box-shadow: 0 8px 16px rgba(0, 0, 0, .22); }
+.amount-section { position: sticky; top: 0; z-index: 2; display: grid; justify-items: center; gap: 4px; margin: 0 -18px 12px; padding: 12px 18px 9px; background: #171a1c; box-shadow: 0 8px 16px rgba(0, 0, 0, .22); }
 .amount-section > span { color: var(--muted); font-size: 12px; }
 .amount-display { font-size: 36px; font-variant-numeric: tabular-nums; font-weight: 850; letter-spacing: -.05em; }
-.entry-section { margin: 20px 0; }
+.entry-section { margin: 14px 0; }
 .field-label { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
 .field-label h3 { margin: 0; }
 .field-label > span { color: var(--muted); font-size: 11px; text-align: right; }
@@ -193,7 +194,7 @@ textarea { padding: 11px; resize: vertical; }
 .parent-tab--active { color: var(--text); }
 .parent-tab--active::after { position: absolute; right: 13px; bottom: -8px; left: 13px; height: 3px; border-radius: 4px; background: var(--select); content: ''; }
 .category-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
-.category-tile { display: grid; min-height: 88px; place-items: center; padding: 8px; border: 1px solid transparent; border-radius: 15px; background: #404446; color: #d6d8d7; font-size: 14px; font-weight: 750; line-height: 1.3; text-align: center; }
+.category-tile { display: grid; min-height: 64px; place-items: center; padding: 8px; border: 1px solid transparent; border-radius: 15px; background: #404446; color: #d6d8d7; font-size: 14px; font-weight: 750; line-height: 1.3; text-align: center; }
 .category-tile span { overflow-wrap: anywhere; }
 .category-tile--active { border-color: var(--select); box-shadow: inset 0 0 0 3px var(--select); color: #fff; }
 .category-empty { display: grid; min-height: 88px; grid-column: 1 / -1; place-items: center; border: 1px dashed #3f4748; border-radius: 15px; color: var(--muted); font-size: 14px; }
@@ -202,6 +203,32 @@ textarea { padding: 11px; resize: vertical; }
 .chip--active { border-color: var(--accent); background: #25483c; color: #e3fff1; }
 .chip:disabled { opacity: .36; cursor: not-allowed; }
 .note-field { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
+.more-options { margin: 8px 0 2px; border-top: 1px solid var(--line); }
+.more-options > summary { display: flex; min-height: 48px; align-items: center; justify-content: space-between; gap: 10px; color: var(--text); cursor: pointer; font-size: 14px; font-weight: 800; list-style: none; }
+.more-options > summary::-webkit-details-marker { display: none; }
+.more-options > summary::after { color: var(--muted); content: '＋'; font-size: 20px; }
+.more-options[open] > summary::after { content: '−'; }
+.more-options > summary small { margin-left: auto; color: var(--muted); font-size: 11px; font-weight: 500; }
+.more-options__body { padding-bottom: 2px; }
+.debt-section { border-color: #66533a; background: linear-gradient(135deg, rgba(77, 57, 29, .55), rgba(29, 35, 36, .72)); }
+.debt-direction { display: flex; flex-wrap: wrap; gap: 7px; }
+.debt-impact { margin: 10px 0 0; color: #e7c98e; font-size: 12px; line-height: 1.45; }
+.debt-status-details { padding: 13px; border: 1px solid #5b4d38; border-radius: 15px; background: #29241c; }
+.debt-status-details .field-label strong { color: #f0ce8d; font-size: 13px; }
+.debt-settlement-history { display: grid; margin-bottom: 12px; }
+.debt-settlement-history button { display: flex; min-height: 42px; align-items: center; justify-content: space-between; border: 0; border-bottom: 1px solid rgba(255,255,255,.08); background: transparent; color: var(--text); }
+.debt-settlement-history p { color: var(--muted); font-size: 12px; }
+.debt-overview { margin: 20px 0; }
+.debt-summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.debt-summary-grid article { padding: 12px; border: 1px solid #514735; border-radius: 14px; background: #252119; }
+.debt-summary-grid span, .debt-summary-grid strong { display: block; }
+.debt-summary-grid span { color: var(--muted); font-size: 12px; }
+.debt-summary-grid strong { margin-top: 4px; color: #efd094; font-size: 17px; }
+.debt-overview-list { display: grid; margin-top: 7px; }
+.debt-overview-list button { display: flex; min-height: 54px; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 2px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--text); text-align: left; }
+.debt-overview-list span, .debt-overview-list b, .debt-overview-list small { display: block; }
+.debt-overview-list small { margin-top: 3px; color: var(--muted); font-size: 11px; }
+.debt-overview-list strong { color: #efd094; font-size: 13px; white-space: nowrap; }
 .reimbursement-section { padding: 13px; border: 1px solid #334840; border-radius: 15px; background: linear-gradient(135deg, rgba(29, 61, 49, .56), rgba(29, 35, 36, .72)); }
 .planned-claim-section { border-color: #5d4b2b; background: linear-gradient(135deg, rgba(76, 57, 24, .54), rgba(31, 35, 34, .72)); }
 .planned-claim-section .reimbursement-toggle--active { border-color: #e8bd6a; background: #4a3a1d; }

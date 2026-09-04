@@ -74,7 +74,12 @@ function requireTime(value) {
 }
 
 function requireTransactionType(value) {
-  if (!['expense', 'income', 'transfer'].includes(value)) throw new DataValidationError('交易類型不正確。');
+  if (!['expense', 'income', 'transfer', 'debt', 'debt-settlement'].includes(value)) throw new DataValidationError('交易類型不正確。');
+  return value;
+}
+
+function requireDebtDirection(value) {
+  if (!['payable', 'receivable'].includes(value)) throw new DataValidationError('請選擇我欠別人或別人欠我。');
   return value;
 }
 
@@ -198,8 +203,20 @@ async function buildNormalTransaction(stores, input, type, existing = null) {
   if (type !== 'expense' && isPlannedClaim) throw new DataValidationError('只有支出可標記預計請款。');
   if (claimBatchId && !isPlannedClaim) throw new DataValidationError('已請款項目不可直接取消預計請款。');
   const requiresCategory = type === 'expense' || parentCategoryId || subcategoryId;
+  const base = transactionBase(input, type, existing);
+  const debtDirection = type === 'expense'
+    ? (Object.hasOwn(input, 'debtDirection') ? input.debtDirection : existing?.debtDirection ?? null)
+    : null;
+  const debtAmountInput = Object.hasOwn(input, 'debtAmount') ? input.debtAmount : existing?.debtAmount;
+  const debtAmount = debtDirection ? requirePositiveAmount(debtAmountInput) : null;
+  if (debtDirection) {
+    requireDebtDirection(debtDirection);
+    if (debtAmount > base.amount) throw new DataValidationError('欠款或待收金額不可大於支出金額。');
+    if (!base.note) throw new DataValidationError('請在備註填寫欠款對象。');
+    if (isPlannedClaim) throw new DataValidationError('欠款支出不可同時標記預計請款。');
+  }
   const transaction = {
-    ...transactionBase(input, type, existing),
+    ...base,
     accountId: account.id,
     accountNameSnapshot: account.name,
     accountIds: [account.id],
@@ -221,6 +238,10 @@ async function buildNormalTransaction(stores, input, type, existing = null) {
     sourceAccountNameSnapshot: null,
     targetAccountId: null,
     targetAccountNameSnapshot: null,
+    debtDirection,
+    debtAmount,
+    debtSourceId: null,
+    isDebtSettlement: false,
   };
   if (!requiresCategory) return transaction;
   if (!parentCategoryId) throw new DataValidationError('請選擇母類別。');
@@ -245,6 +266,75 @@ async function buildNormalTransaction(stores, input, type, existing = null) {
     subcategoryId: subcategory.id,
     subcategoryNameSnapshot: subcategory.name,
     isDirectParentExpense: false,
+  };
+}
+
+async function buildDebtTransaction(stores, input, existing = null) {
+  const account = await mustGet(stores.accounts, input.accountId ?? existing?.accountId, '帳戶');
+  const transaction = transactionBase(input, 'debt', existing);
+  const debtDirection = requireDebtDirection(input.debtDirection ?? existing?.debtDirection);
+  if (!transaction.note) throw new DataValidationError('請在備註填寫借貸對象。');
+  return {
+    ...transaction,
+    accountId: account.id,
+    accountNameSnapshot: account.name,
+    accountIds: [account.id],
+    parentCategoryId: null,
+    parentCategoryNameSnapshot: null,
+    subcategoryId: null,
+    subcategoryNameSnapshot: null,
+    isDirectParentExpense: false,
+    isReimbursement: false,
+    isPlannedClaim: false,
+    claimBatchId: null,
+    claimNote: null,
+    reimbursementExpenseId: null,
+    reimbursementExpenseIds: null,
+    isBatchReimbursement: false,
+    reimbursementBatchNote: null,
+    reimbursementTransactionId: null,
+    sourceAccountId: null,
+    sourceAccountNameSnapshot: null,
+    targetAccountId: null,
+    targetAccountNameSnapshot: null,
+    debtDirection,
+    debtAmount: transaction.amount,
+    debtSourceId: null,
+    isDebtSettlement: false,
+  };
+}
+
+async function buildDebtSettlementTransaction(stores, source, input) {
+  const account = await mustGet(stores.accounts, input.accountId, '還款帳戶');
+  const transaction = transactionBase(input, 'debt-settlement');
+  return {
+    ...transaction,
+    note: source.note,
+    accountId: account.id,
+    accountNameSnapshot: account.name,
+    accountIds: [account.id],
+    parentCategoryId: null,
+    parentCategoryNameSnapshot: null,
+    subcategoryId: null,
+    subcategoryNameSnapshot: null,
+    isDirectParentExpense: false,
+    isReimbursement: false,
+    isPlannedClaim: false,
+    claimBatchId: null,
+    claimNote: null,
+    reimbursementExpenseId: null,
+    reimbursementExpenseIds: null,
+    isBatchReimbursement: false,
+    reimbursementBatchNote: null,
+    reimbursementTransactionId: null,
+    sourceAccountId: null,
+    sourceAccountNameSnapshot: null,
+    targetAccountId: null,
+    targetAccountNameSnapshot: null,
+    debtDirection: source.debtDirection,
+    debtAmount: null,
+    debtSourceId: source.id,
+    isDebtSettlement: true,
   };
 }
 
@@ -302,6 +392,10 @@ function buildReimbursementTransaction(expense, input = {}, existing = null) {
     sourceAccountNameSnapshot: null,
     targetAccountId: null,
     targetAccountNameSnapshot: null,
+    debtDirection: null,
+    debtAmount: null,
+    debtSourceId: null,
+    isDebtSettlement: false,
   };
 }
 
@@ -340,6 +434,10 @@ function buildBatchReimbursementTransaction(expenses, note, input = {}, existing
     sourceAccountNameSnapshot: null,
     targetAccountId: null,
     targetAccountNameSnapshot: null,
+    debtDirection: null,
+    debtAmount: null,
+    debtSourceId: null,
+    isDebtSettlement: false,
   };
 }
 
@@ -374,6 +472,10 @@ async function buildTransferTransaction(stores, input, existing = null) {
     sourceAccountNameSnapshot: source.name,
     targetAccountId: target.id,
     targetAccountNameSnapshot: target.name,
+    debtDirection: null,
+    debtAmount: null,
+    debtSourceId: null,
+    isDebtSettlement: false,
   };
 }
 
@@ -408,6 +510,10 @@ async function buildCsvNormalTransaction(stores, input) {
     sourceAccountNameSnapshot: null,
     targetAccountId: null,
     targetAccountNameSnapshot: null,
+    debtDirection: input.debtDirection || null,
+    debtAmount: input.debtAmount ?? null,
+    debtSourceId: input.debtSourceId || null,
+    isDebtSettlement: input.type === 'debt-settlement',
   };
   if (!hasCategory) return transaction;
   const parentCategory = await mustGet(stores.parentCategories, input.parentCategoryId, 'CSV 母類別');
@@ -459,6 +565,10 @@ async function buildCsvTransferTransaction(stores, input) {
     sourceAccountNameSnapshot: requireText(input.sourceAccountNameSnapshot, 'CSV 來源帳戶名稱'),
     targetAccountId: target.id,
     targetAccountNameSnapshot: requireText(input.targetAccountNameSnapshot, 'CSV 目的帳戶名稱'),
+    debtDirection: null,
+    debtAmount: null,
+    debtSourceId: null,
+    isDebtSettlement: false,
   };
 }
 
@@ -475,7 +585,10 @@ function skippedCsvTransactionStillMatches(record, transaction) {
     && JSON.stringify(reimbursementSourceIds(record)) === JSON.stringify(reimbursementSourceIds(transaction))
     && Boolean(record.isBatchReimbursement) === Boolean(transaction.isBatchReimbursement)
     && (record.reimbursementBatchNote || null) === (transaction.reimbursementBatchNote || null)
-    && (record.reimbursementTransactionId || null) === (transaction.reimbursementTransactionId || null);
+    && (record.reimbursementTransactionId || null) === (transaction.reimbursementTransactionId || null)
+    && (record.debtDirection || null) === (transaction.debtDirection || null)
+    && (record.debtAmount || null) === (transaction.debtAmount || null)
+    && (record.debtSourceId || null) === (transaction.debtSourceId || null);
   if (!sameBase) return false;
   if (record.type === 'transfer') {
     return record.sourceAccountName === transaction.sourceAccountNameSnapshot
@@ -483,7 +596,7 @@ function skippedCsvTransactionStillMatches(record, transaction) {
       && (!record.sourceAccountId || record.sourceAccountId === transaction.sourceAccountId)
       && (!record.targetAccountId || record.targetAccountId === transaction.targetAccountId);
   }
-  if (record.type === 'income' && !record.parentCategoryName && !record.subcategoryName && !record.parentCategoryId && !record.subcategoryId) {
+  if (['income', 'debt', 'debt-settlement'].includes(record.type) && !record.parentCategoryName && !record.subcategoryName && !record.parentCategoryId && !record.subcategoryId) {
     return record.accountName === transaction.accountNameSnapshot
       && (!record.accountId || record.accountId === transaction.accountId)
       && !transaction.parentCategoryId
@@ -532,18 +645,41 @@ async function validateReimbursementLink(stores, transaction) {
   }
 }
 
+async function validateDebtLink(stores, transaction) {
+  if (transaction.type === 'debt-settlement') {
+    const source = await mustGet(stores.transactions, transaction.debtSourceId, 'CSV 借貸來源');
+    if (!['expense', 'debt'].includes(source.type) || !source.debtDirection || source.debtDirection !== transaction.debtDirection) throw new DataValidationError('CSV 還款或收款關聯錯誤。');
+    const allTransactions = await requestAsPromise(stores.transactions.getAll());
+    const settled = allTransactions.filter((item) => item.type === 'debt-settlement' && item.debtSourceId === source.id).reduce((sum, item) => sum + item.amount, 0);
+    if (settled > source.debtAmount) throw new DataValidationError('CSV 還款或收款總額大於原借貸金額。');
+  }
+}
+
 export function calculateAccountBalance(account, transactions) {
   return transactions.reduce((balance, transaction) => {
     if (transaction.type === 'income' && transaction.accountId === account.id) return balance + transaction.amount;
-    if (transaction.type === 'expense' && transaction.accountId === account.id) return balance - transaction.amount;
+    if (transaction.type === 'expense' && transaction.accountId === account.id) {
+      const paidAmount = transaction.debtDirection === 'payable' ? transaction.amount - Number(transaction.debtAmount || 0) : transaction.amount;
+      return balance - paidAmount;
+    }
     if (transaction.type === 'transfer' && transaction.sourceAccountId === account.id) return balance - transaction.amount;
     if (transaction.type === 'transfer' && transaction.targetAccountId === account.id) return balance + transaction.amount;
+    if (transaction.type === 'debt' && transaction.accountId === account.id) return balance + (transaction.debtDirection === 'payable' ? transaction.amount : -transaction.amount);
+    if (transaction.type === 'debt-settlement' && transaction.accountId === account.id) return balance + (transaction.debtDirection === 'receivable' ? transaction.amount : -transaction.amount);
     return balance;
   }, account.initialBalance);
 }
 
 export function calculateAccountBalances(accounts, transactions) {
   return new Map(accounts.map((account) => [account.id, calculateAccountBalance(account, transactions)]));
+}
+
+export function calculateDebtRemaining(source, transactions) {
+  if (!source?.debtDirection || !Number.isFinite(Number(source.debtAmount))) return 0;
+  const settled = transactions
+    .filter((transaction) => transaction.type === 'debt-settlement' && transaction.debtSourceId === source.id)
+    .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+  return Math.max(Number(source.debtAmount) - settled, 0);
 }
 
 export class MeowneyRepository {
@@ -667,10 +803,13 @@ export class MeowneyRepository {
 
   async createTransaction(input) {
     const type = requireTransactionType(input.type);
+    if (type === 'debt-settlement') throw new DataValidationError('還款或收款請從原借貸項目操作。');
     return this.write([STORE.accounts, STORE.parentCategories, STORE.subcategories, STORE.transactions], async (stores) => {
       const transaction = type === 'transfer'
         ? await buildTransferTransaction(stores, input)
-        : await buildNormalTransaction(stores, input, type);
+        : type === 'debt'
+          ? await buildDebtTransaction(stores, input)
+          : await buildNormalTransaction(stores, input, type);
       await requestAsPromise(stores.transactions.add(transaction));
       return transaction;
     });
@@ -680,6 +819,7 @@ export class MeowneyRepository {
     if (requireTransactionType(input.type) !== 'expense') throw new DataValidationError('只有支出可以新增報銷。');
     return this.write([STORE.accounts, STORE.parentCategories, STORE.subcategories, STORE.transactions], async (stores) => {
       const expense = await buildNormalTransaction(stores, input, 'expense');
+      if (expense.debtDirection) throw new DataValidationError('欠款支出不可同時建立報銷。');
       const details = reimbursementDetails(reimbursementInput);
       const reimbursement = buildReimbursementTransaction(expense, {
         amount: details.amount === undefined ? expense.amount : details.amount,
@@ -695,13 +835,25 @@ export class MeowneyRepository {
   async updateTransaction(id, input) {
     return this.write([STORE.accounts, STORE.parentCategories, STORE.subcategories, STORE.transactions], async (stores) => {
       const existing = await mustGet(stores.transactions, id, '交易');
+      if (existing.type === 'debt-settlement') throw new DataValidationError('還款或收款紀錄不可直接編輯，請刪除後重新登記。');
       if (existing.isReimbursement === true) throw new DataValidationError('報銷項目請直接修改報銷金額或備註。');
       if (existing.reimbursementTransactionId) throw new DataValidationError('此支出含連動報銷，請使用報銷支出更新操作。');
       const requestedType = input.type ? requireTransactionType(input.type) : existing.type;
       if (requestedType !== existing.type) throw new DataValidationError('既有交易不可變更類型。');
       const transaction = existing.type === 'transfer'
         ? await buildTransferTransaction(stores, { ...existing, ...input }, existing)
-        : await buildNormalTransaction(stores, { ...existing, ...input }, existing.type, existing);
+        : existing.type === 'debt'
+          ? await buildDebtTransaction(stores, { ...existing, ...input }, existing)
+          : await buildNormalTransaction(stores, { ...existing, ...input }, existing.type, existing);
+      const allTransactions = await requestAsPromise(stores.transactions.getAll());
+      const linkedSettlements = allTransactions.filter((candidate) => candidate.type === 'debt-settlement' && candidate.debtSourceId === existing.id);
+      if (linkedSettlements.length && (!transaction.debtDirection || transaction.debtDirection !== existing.debtDirection)) {
+        throw new DataValidationError('已有還款或收款紀錄時不可取消或變更借貸方向，請先刪除結清紀錄。');
+      }
+      if (transaction.debtDirection) {
+        const settled = linkedSettlements.reduce((sum, candidate) => sum + candidate.amount, 0);
+        if (settled > transaction.debtAmount) throw new DataValidationError(`欠款金額不可低於已還款或收款金額 ${settled}。`);
+      }
       await requestAsPromise(stores.transactions.put(transaction));
       return transaction;
     });
@@ -712,6 +864,14 @@ export class MeowneyRepository {
       const existing = await mustGet(stores.transactions, id, '支出');
       if (existing.type !== 'expense' || existing.isReimbursement === true) throw new DataValidationError('只有一般支出可以設定報銷。');
       const expense = await buildNormalTransaction(stores, { ...existing, ...input }, 'expense', existing);
+      if (enabled && expense.debtDirection) throw new DataValidationError('欠款支出不可同時設定報銷。');
+      const linkedSettlements = (await requestAsPromise(stores.transactions.getAll()))
+        .filter((candidate) => candidate.type === 'debt-settlement' && candidate.debtSourceId === existing.id);
+      if (linkedSettlements.length && (!expense.debtDirection || expense.debtDirection !== existing.debtDirection)) {
+        throw new DataValidationError('已有還款或收款紀錄時不可取消或變更借貸方向，請先刪除結清紀錄。');
+      }
+      const settled = linkedSettlements.reduce((sum, candidate) => sum + candidate.amount, 0);
+      if (settled > Number(expense.debtAmount || 0)) throw new DataValidationError(`欠款金額不可低於已還款或收款金額 ${settled}。`);
       const existingReimbursement = existing.reimbursementTransactionId
         ? await mustGet(stores.transactions, existing.reimbursementTransactionId, '連動報銷')
         : null;
@@ -787,6 +947,22 @@ export class MeowneyRepository {
     return this.updateReimbursementTransaction(id, { note });
   }
 
+  async createDebtSettlement(sourceId, input) {
+    return this.write([STORE.accounts, STORE.transactions], async (stores) => {
+      const source = await mustGet(stores.transactions, sourceId, '借貸項目');
+      if (!['expense', 'debt'].includes(source.type) || !source.debtDirection || source.isDebtSettlement === true) {
+        throw new DataValidationError('只有未結清的借貸項目可以登記還款或收款。');
+      }
+      const allTransactions = await requestAsPromise(stores.transactions.getAll());
+      const remaining = calculateDebtRemaining(source, allTransactions);
+      if (remaining <= 0) throw new DataValidationError('這筆借貸已結清。');
+      const settlement = await buildDebtSettlementTransaction(stores, source, input);
+      if (settlement.amount > remaining) throw new DataValidationError(`本次金額不可大於未結清金額 ${remaining}。`);
+      await requestAsPromise(stores.transactions.add(settlement));
+      return settlement;
+    });
+  }
+
   async deleteTransaction(id) {
     return this.write(STORE.transactions, async ({ transactions }) => {
       const existing = await mustGet(transactions, id, '交易');
@@ -821,6 +997,11 @@ export class MeowneyRepository {
             await requestAsPromise(transactions.delete(reimbursement.id));
           }
         }
+      }
+      if (existing.debtDirection && existing.isDebtSettlement !== true) {
+        const linkedSettlements = (await requestAsPromise(transactions.getAll()))
+          .filter((transaction) => transaction.type === 'debt-settlement' && transaction.debtSourceId === existing.id);
+        for (const settlement of linkedSettlements) await requestAsPromise(transactions.delete(settlement.id));
       }
       await requestAsPromise(transactions.delete(id));
     });
@@ -895,6 +1076,7 @@ export class MeowneyRepository {
       for (const input of plan.transactionsToCreate) {
         const transaction = await mustGet(stores.transactions, input.id, 'CSV 交易');
         await validateReimbursementLink(stores, transaction);
+        await validateDebtLink(stores, transaction);
       }
     });
   }

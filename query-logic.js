@@ -30,7 +30,11 @@ function amountValue(value, label) {
 
 export function incomeExpenseAmount(transaction, transactions = []) {
   if (Number.isFinite(transaction.statisticalAmount)) return transaction.statisticalAmount;
+  if (!['expense', 'income'].includes(transaction.type)) return 0;
   if (transaction.isReimbursement === true) return 0;
+  if (transaction.type === 'expense' && transaction.debtDirection === 'receivable') {
+    return Math.max(transaction.amount - Number(transaction.debtAmount || 0), 0);
+  }
   if (transaction.type !== 'expense' || !transaction.reimbursementTransactionId) return transaction.amount;
   const reimbursement = transactions.find((item) => item.id === transaction.reimbursementTransactionId && item.isReimbursement === true);
   if (!reimbursement || reimbursement.isBatchReimbursement === true) return 0;
@@ -81,7 +85,7 @@ export function normalizeQueryFilters(rawFilters = {}, now = new Date()) {
 }
 
 export function matchesQuery(transaction, filters, transactions = []) {
-  if (transaction.type === 'transfer') return false;
+  if (!['expense', 'income'].includes(transaction.type)) return false;
   if (filters.type !== 'all' && (transaction.type !== filters.type || isExcludedFromIncomeExpense(transaction, transactions))) return false;
   if (filters.claimStatus === 'planned' && (transaction.type !== 'expense' || transaction.isPlannedClaim !== true || transaction.reimbursementTransactionId)) return false;
   if (filters.accountId && transaction.accountId !== filters.accountId) return false;

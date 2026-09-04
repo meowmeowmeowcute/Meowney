@@ -27,6 +27,11 @@
             </div>
             <div id="account-list" class="account-list" aria-live="polite"></div>
           </section>
+          <section id="debt-overview" class="debt-overview" aria-labelledby="debt-overview-title" hidden>
+            <div class="section-heading"><h2 id="debt-overview-title">借貸</h2><span id="debt-overview-count"></span></div>
+            <div class="debt-summary-grid"><article><span>我還欠</span><strong id="payable-total">NT$ 0</strong></article><article><span>待收回</span><strong id="receivable-total">NT$ 0</strong></article></div>
+            <div id="debt-overview-list" class="debt-overview-list"></div>
+          </section>
           <section class="transactions-section" aria-labelledby="transactions-title">
             <div class="section-heading">
               <h2 id="transactions-title">交易紀錄</h2>
@@ -222,6 +227,7 @@
           <button type="button" data-type="expense" class="type-switch__item type-switch__item--active">支出</button>
           <button type="button" data-type="income" class="type-switch__item">收入</button>
           <button type="button" data-type="transfer" class="type-switch__item">轉帳</button>
+          <button type="button" data-type="debt" class="type-switch__item">借貸</button>
         </div>
 
         <section class="amount-section" aria-labelledby="amount-label">
@@ -255,6 +261,30 @@
           <div id="source-account-options" class="chip-row"></div>
           <h3>目的帳戶 <em>必填</em></h3>
           <div id="target-account-options" class="chip-row"></div>
+        </section>
+
+        <details id="more-options" class="more-options">
+          <summary>更多設定 <small>備註、報銷、借貸、日期</small></summary>
+          <div class="more-options__body">
+        <section id="debt-section" class="entry-section reimbursement-section debt-section" aria-labelledby="debt-label" hidden>
+          <div class="field-label"><h3 id="debt-label">借貸狀態</h3><span id="debt-guidance">這筆支出是否包含欠款</span></div>
+          <div class="debt-direction" role="group" aria-label="借貸方向">
+            <button type="button" data-debt-direction="" class="chip">沒有借貸</button>
+            <button type="button" data-debt-direction="payable" class="chip">我欠別人</button>
+            <button type="button" data-debt-direction="receivable" class="chip">別人欠我</button>
+          </div>
+          <label id="debt-amount-field" class="note-field reimbursement-amount-field" hidden>欠款金額（必填）
+            <input id="debt-amount-input" type="number" min="0.01" step="0.01" inputmode="decimal" autocomplete="off" placeholder="例如：300" />
+          </label>
+          <p id="debt-impact" class="debt-impact" hidden></p>
+        </section>
+
+        <section id="debt-status-details" class="entry-section debt-status-details" hidden>
+          <div class="field-label"><h3>還款／收款</h3><strong id="debt-remaining"></strong></div>
+          <div id="debt-settlement-history" class="debt-settlement-history"></div>
+          <label class="note-field">本次金額<input id="debt-settlement-amount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="輸入部分或全部金額" /></label>
+          <h3>使用帳戶 <em>必填</em></h3><div id="debt-settlement-accounts" class="chip-row"></div>
+          <button id="save-debt-settlement" class="button button--secondary button--full" type="button">登記</button>
         </section>
 
         <section id="planned-claim-section" class="entry-section reimbursement-section planned-claim-section" aria-labelledby="planned-claim-label" hidden>
@@ -302,6 +332,8 @@
           <label>日期<input id="date-input" type="date" /></label>
           <label>時間<input id="time-input" type="time" /></label>
         </div>
+          </div>
+        </details>
 
         <p id="form-error" class="form-error" role="alert" hidden></p>
 
