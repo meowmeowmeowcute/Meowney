@@ -1,7 +1,7 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=33';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=33';
-import { calculateExpression, updateExpression } from './calculator.js?v=33';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=33';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=34';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=34';
+import { calculateExpression, updateExpression } from './calculator.js?v=34';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=34';
 
 const state = {
   repository: null,
@@ -19,6 +19,7 @@ const state = {
   claimCandidates: [],
   transactionDefaults: {},
 };
+let sheetDrag = null;
 
 const DEFAULT_PARENT_CATEGORIES = ['購物', '吃喝', '交通', '娛樂', '生活', DIRECT_EXPENSE_PARENT_CATEGORY_NAME];
 
@@ -461,6 +462,9 @@ function openSheet(editingId = null, { updateHistory = true } = {}) {
 
 function closeSheet({ updateHistory = true } = {}) {
   const opener = state.sheetOpener;
+  const sheet = $('#transaction-sheet');
+  sheet.style.transform = '';
+  sheet.classList.remove('bottom-sheet--dragging');
   $('#transaction-sheet').hidden = true;
   $('#sheet-overlay').hidden = true;
   $('#confirm-dialog').hidden = true;
@@ -472,6 +476,40 @@ function closeSheet({ updateHistory = true } = {}) {
   if (updateHistory && history.state?.meowney === true && history.state.view === 'sheet') history.back();
 }
 
+function resetSheetDrag() {
+  const sheet = $('#transaction-sheet');
+  sheet.style.transform = '';
+  sheet.classList.remove('bottom-sheet--dragging');
+  sheetDrag = null;
+}
+
+function beginSheetDrag(event) {
+  if ($('#transaction-sheet').hidden || event.button !== 0 || event.target.closest('button, input, textarea, select, a')) return;
+  const body = $('.sheet-body');
+  if (body.contains(event.target) && body.scrollTop > 0) return;
+  sheetDrag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, deltaY: 0 };
+  event.currentTarget.setPointerCapture?.(event.pointerId);
+}
+
+function moveSheetDrag(event) {
+  if (!sheetDrag || event.pointerId !== sheetDrag.pointerId) return;
+  const deltaX = event.clientX - sheetDrag.startX;
+  const deltaY = Math.max(event.clientY - sheetDrag.startY, 0);
+  if (deltaY < 7 || Math.abs(deltaX) > deltaY) return;
+  sheetDrag.deltaY = deltaY;
+  const sheet = $('#transaction-sheet');
+  sheet.classList.add('bottom-sheet--dragging');
+  sheet.style.transform = `translateY(${deltaY}px)`;
+  event.preventDefault();
+}
+
+function endSheetDrag(event) {
+  if (!sheetDrag || event.pointerId !== sheetDrag.pointerId) return;
+  const shouldClose = sheetDrag.deltaY >= Math.min(120, window.innerHeight * .18);
+  resetSheetDrag();
+  if (shouldClose) closeSheet();
+}
+
 function renderSheet() {
   const form = state.form;
   if (!form) return;
@@ -481,11 +519,9 @@ function renderSheet() {
   const batchReimbursementSource = !reimbursementReadOnly && form.isBatchReimbursement === true;
   const currentTransaction = form.id ? state.transactions.find((item) => item.id === form.id) : null;
   const settlementSource = debtSettlementReadOnly ? state.transactions.find((item) => item.id === form.debtSourceId) : null;
-  $$('.type-switch__item').forEach((button) => {
-    button.classList.toggle('type-switch__item--active', button.dataset.type === form.type);
-    button.disabled = Boolean(form.id);
-  });
-  $('#transaction-type-switch').hidden = debtSettlementReadOnly;
+  $('#transaction-type-cycle').textContent = ({ expense: '支出', income: '收入', transfer: '轉帳', debt: '借貸' })[form.type] || '支出';
+  $('#transaction-type-cycle').disabled = Boolean(form.id);
+  $('#transaction-type-cycle').hidden = debtSettlementReadOnly;
   $('#quick-entry-panel').hidden = debtSettlementReadOnly;
   $('#number-pad').hidden = debtSettlementReadOnly;
   $('#amount-label').textContent = debtSettlementReadOnly ? (form.debtDirection === 'payable' ? '還款金額' : '收款金額') : '金額';
@@ -589,6 +625,11 @@ function renderSheet() {
 }
 
 function appendAmount(key) {
+  if (key === 'operator-cycle') {
+    const operators = ['+', '-', '×', '÷'];
+    const currentOperator = state.form.amountExpression?.at(-1);
+    key = operators.includes(currentOperator) ? operators[(operators.indexOf(currentOperator) + 1) % operators.length] : operators[0];
+  }
   const currentExpression = state.form.amountExpression ?? state.form.amountText;
   const result = updateExpression(currentExpression, key);
   state.form.amountExpression = result.expression;
@@ -1101,13 +1142,18 @@ function initialiseEvents() {
   $('#add-transaction').addEventListener('click', () => openSheet());
   $('#close-sheet').addEventListener('click', closeSheet);
   $('#sheet-overlay').addEventListener('click', closeSheet);
-  $$('.type-switch__item').forEach((button) => button.addEventListener('click', () => {
+  $('#transaction-sheet').addEventListener('pointerdown', beginSheetDrag);
+  $('#transaction-sheet').addEventListener('pointermove', moveSheetDrag);
+  $('#transaction-sheet').addEventListener('pointerup', endSheetDrag);
+  $('#transaction-sheet').addEventListener('pointercancel', resetSheetDrag);
+  $('#transaction-type-cycle').addEventListener('click', () => {
     if (!state.form?.id) {
-      applyTypeDefaults(state.form, button.dataset.type);
+      const types = ['expense', 'income', 'transfer', 'debt'];
+      applyTypeDefaults(state.form, types[(types.indexOf(state.form.type) + 1) % types.length]);
       $('#form-error').hidden = true;
       renderSheet();
     }
-  }));
+  });
   $$('[data-debt-direction]').forEach((button) => button.addEventListener('click', () => {
     if (!state.form || !['expense', 'debt'].includes(state.form.type)) return;
     state.form.debtDirection = button.dataset.debtDirection || null;

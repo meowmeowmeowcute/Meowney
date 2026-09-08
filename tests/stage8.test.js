@@ -40,7 +40,7 @@ export async function runStage8Tests() {
   });
   await test('借貸支援消費欠款、獨立借貸、部分結清與手機快速操作', async () => {
     const [app, html, dataLayer, queryLogic, css] = await Promise.all([read('app.js'), read('index.html'), read('data-layer.js'), read('query-logic.js'), read('styles.css')]);
-    assert(html.includes('data-type="debt"') && html.includes('id="debt-section"') && html.includes('id="debt-status-details"') && html.includes('id="debt-overview"'), '借貸新增、結清或未結清摘要入口不完整。');
+    assert(html.includes('id="transaction-type-cycle"') && app.includes("'transfer', 'debt'") && html.includes('id="debt-section"') && html.includes('id="debt-status-details"') && html.includes('id="debt-overview"'), '借貸新增、結清或未結清摘要入口不完整。');
     assert(dataLayer.includes('createDebtSettlement') && dataLayer.includes('calculateDebtRemaining') && dataLayer.includes("transaction.type === 'debt-settlement'"), '借貸資料層缺少部分結清或餘額計算。');
     assert(queryLogic.includes("!['expense', 'income'].includes(transaction.type)") && queryLogic.includes("transaction.debtDirection === 'receivable'"), '借貸仍可能重複計入收入支出。');
     assert(app.includes('renderDebtOverview()') && app.includes('saveDebtSettlement') && css.includes('.more-options'), '借貸摘要、結清操作或精簡表單未接上。');
@@ -103,9 +103,10 @@ export async function runStage8Tests() {
   await test('高頻記帳、首次使用、驗證與返回流程已完成便利性改善', async () => {
     const [app, html, css, requirements, uxNotes] = await Promise.all([read('app.js'), read('index.html'), read('styles.css'), read('PROJECT_REQUIREMENTS.md'), read('UX_IMPROVEMENTS.md')]);
     assert(html.indexOf('class="number-pad"') > html.indexOf('id="category-section"') && html.includes('id="quick-entry-panel"'), '數字鍵盤未整合到底部快速操作區。');
-    assert(html.indexOf('id="transaction-type-switch"') > html.indexOf('id="quick-entry-panel"') && /\.type-switch\s*\{[^}]*grid-template-columns:\s*repeat\(2, 1fr\)/.test(css), '交易類型未放在底部田字型操作區。');
+    assert(html.indexOf('id="transaction-type-cycle"') > html.indexOf('id="quick-entry-panel"') && app.includes("const types = ['expense', 'income', 'transfer', 'debt']"), '交易類型單鍵循環切換未放在底部操作區。');
     assert(!html.includes('id="quick-category-button"') && !html.includes('id="toggle-date-time"'), '介面仍保留重複分類或額外時間展開操作。');
-    assert(/\.sheet-actions\s*\{[^}]*flex:\s*0 0 auto/.test(css) && html.indexOf('class="sheet-actions"') > html.indexOf('id="form-error"'), '交易確認操作未與可捲動內容分離。');
+    assert(html.indexOf('id="save-transaction"') > html.indexOf('id="quick-entry-panel"') && /\.quick-entry-panel\s*\{[^}]*max-height:\s*33\.333dvh/.test(css), '交易確認操作未固定在三分之一高度內。');
+    assert(/\.bottom-sheet\s*\{[^}]*inset:\s*0[^}]*height:\s*100dvh/.test(css) && app.includes('beginSheetDrag') && app.includes('translateY(${deltaY}px)'), '全螢幕記帳或下拉關閉交互未完整。');
     assert(app.includes("setSetting('transaction-defaults'") && app.includes('validExpenseCategory') && app.includes('state.selectedAccountId'), '帳戶或類別預設沒有安全保存與驗證。');
     assert(app.includes('data-open-account-setup') && app.includes("account?.initialBalance ?? '0'"), '首次使用入口或初始餘額預設不存在。');
     assert(app.includes("scrollIntoView({ behavior: 'smooth', block: 'center' })") && css.includes('.validation-target--invalid'), '驗證錯誤沒有定位與標示缺漏欄位。');

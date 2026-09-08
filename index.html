@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/meowney-512.png" type="image/png" />
     <link rel="apple-touch-icon" href="icons/meowney-192.png" />
-    <link rel="stylesheet" href="styles.css?v=33" />
+    <link rel="stylesheet" href="styles.css?v=34" />
   </head>
   <body>
     <div class="app-shell">
@@ -317,37 +317,27 @@
         </section>
 
         <p id="form-error" class="form-error" role="alert" hidden></p>
+        <button id="delete-transaction" class="button button--danger button--full" type="button" hidden>刪除</button>
 
       </div>
       <section id="quick-entry-panel" class="quick-entry-panel" aria-label="快速記帳操作區">
         <div class="quick-entry-top">
-          <div id="transaction-type-switch" class="type-switch" role="group" aria-label="交易類型">
-            <button type="button" data-type="expense" class="type-switch__item type-switch__item--active">支出</button>
-            <button type="button" data-type="income" class="type-switch__item">收入</button>
-            <button type="button" data-type="transfer" class="type-switch__item">轉帳</button>
-            <button type="button" data-type="debt" class="type-switch__item">借貸</button>
-          </div>
-          <div class="quick-entry-summary">
-            <section class="amount-section" aria-labelledby="amount-label">
-              <span id="amount-label">金額</span>
-              <output id="amount-display" class="amount-display">NT$ 0</output>
-              <output id="amount-expression" class="amount-expression" aria-live="polite"></output>
-            </section>
-            <label class="quick-field quick-date-field"><span>日期</span><input id="date-input" type="date" /></label>
-          </div>
+          <button id="transaction-type-cycle" class="type-cycle" type="button" aria-label="切換交易類型">支出</button>
+          <section class="amount-section" aria-labelledby="amount-label">
+            <span id="amount-label">金額</span>
+            <output id="amount-display" class="amount-display">NT$ 0</output>
+            <output id="amount-expression" class="amount-expression" aria-live="polite"></output>
+          </section>
+          <label class="quick-field quick-date-field"><span>日期</span><input id="date-input" type="date" /></label>
+          <button id="save-transaction" class="quick-save" type="button">確定</button>
         </div>
         <div id="calculator-error" class="calculator-error" role="status" hidden></div>
         <div id="number-pad" class="number-pad" aria-label="金額計算鍵盤">
-          <button type="button" data-key="7">7</button><button type="button" data-key="8">8</button><button type="button" data-key="9">9</button><button type="button" class="operator-key" data-key="÷">÷</button><button type="button" class="utility-key" data-key="AC">AC</button>
-          <button type="button" data-key="4">4</button><button type="button" data-key="5">5</button><button type="button" data-key="6">6</button><button type="button" class="operator-key" data-key="×">×</button><button type="button" class="utility-key" data-key="backspace" aria-label="刪除算式最後一個字元">⌫</button>
-          <button type="button" data-key="1">1</button><button type="button" data-key="2">2</button><button type="button" data-key="3">3</button><button type="button" class="operator-key" data-key="-">−</button><button type="button" class="equals-key" data-key="=">=</button>
-          <button type="button" data-key=".">.</button><button type="button" data-key="0">0</button><button type="button" data-key="00">00</button><button type="button" class="operator-key" data-key="+">+</button>
+          <button type="button" data-key="7">7</button><button type="button" data-key="8">8</button><button type="button" data-key="9">9</button><button type="button" class="operator-key" data-key="operator-cycle">+−×÷</button><button type="button" class="utility-key" data-key="AC">AC</button><button type="button" class="utility-key" data-key="backspace" aria-label="刪除算式最後一個字元">⌫</button>
+          <button type="button" data-key="4">4</button><button type="button" data-key="5">5</button><button type="button" data-key="6">6</button><button type="button" data-key="1">1</button><button type="button" data-key="2">2</button><button type="button" data-key="3">3</button>
+          <button type="button" class="zero-key" data-key="0">0</button><button type="button" data-key="00">00</button><button type="button" data-key=".">.</button><button type="button" class="equals-key" data-key="=">=</button>
         </div>
       </section>
-      <div class="sheet-actions">
-        <button id="delete-transaction" class="button button--danger" type="button" hidden>刪除</button>
-        <button id="save-transaction" class="button button--primary" type="button">確定</button>
-      </div>
     </section>
 
     <section id="confirm-dialog" class="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" hidden>
@@ -360,6 +350,6 @@
     </section>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script type="module" src="app.js?v=33"></script>
+    <script type="module" src="app.js?v=34"></script>
   </body>
 </html>
