@@ -266,20 +266,21 @@ textarea { padding: 11px; resize: vertical; }
 .date-time-fields { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .form-error { margin: 12px 0 0; color: #ffc0c0; font-size: 13px; }
 .validation-target--invalid { border-radius: 15px; outline: 2px solid #df7777; outline-offset: 5px; }
-.quick-entry-panel { position: relative; z-index: 3; display: flex; max-height: 33.333dvh; min-height: 0; flex: 0 0 33.333dvh; flex-direction: column; gap: 4px; padding: 5px 8px calc(5px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: #171a1c; box-shadow: 0 -8px 18px rgba(0, 0, 0, .28); }
-.quick-entry-top { display: grid; min-height: 42px; flex: 0 0 42px; grid-template-columns: 54px minmax(68px, 1fr) minmax(94px, 1.15fr) 52px; gap: 4px; }
-.type-cycle, .quick-save { min-width: 0; border: 0; border-radius: 9px; font-size: 13px; font-weight: 850; }
+.quick-entry-panel { position: relative; z-index: 3; display: grid; max-height: 33.333dvh; min-height: 0; flex: 0 0 33.333dvh; grid-template-rows: 42px minmax(0, 1fr); gap: 4px; overflow: hidden; padding: 5px 8px calc(5px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: #171a1c; box-shadow: 0 -8px 18px rgba(0, 0, 0, .28); }
+.quick-entry-top { display: grid; min-width: 0; min-height: 0; grid-template-columns: 54px minmax(68px, 1fr) minmax(94px, 1.15fr) 52px; gap: 4px; overflow: hidden; }
+.type-cycle, .quick-save { min-width: 0; min-height: 0; height: 100%; padding: 0 3px; border: 0; border-radius: 9px; font-size: 13px; font-weight: 850; }
 .type-cycle { background: #454a4c; color: var(--text); }
 .quick-save { background: var(--accent); color: var(--accent-ink); }
-.quick-entry-top .amount-section { align-content: center; padding: 0 4px; }
-.quick-entry-top .amount-display { font-size: clamp(20px, 7vw, 28px); }
-.quick-entry-top .amount-expression { min-height: 10px; font-size: 9px; }
-.quick-field { display: grid; min-width: 0; align-content: center; gap: 1px; padding: 2px 5px; border: 1px solid #3d4345; border-radius: 9px; background: #272c2e; color: var(--text); text-align: left; }
+.quick-entry-top .amount-section { min-height: 0; align-content: center; grid-template-rows: 9px minmax(20px, 1fr) 9px; gap: 0; overflow: hidden; padding: 1px 4px; }
+.quick-entry-top .amount-section > span { overflow: hidden; font-size: 9px; line-height: 9px; }
+.quick-entry-top .amount-display { max-width: 100%; overflow: hidden; font-size: clamp(18px, 6.2vw, 25px); line-height: 1; text-overflow: ellipsis; white-space: nowrap; }
+.quick-entry-top .amount-expression { min-height: 0; overflow: hidden; font-size: 8px; line-height: 9px; }
+.quick-field { display: grid; min-width: 0; min-height: 0; height: 100%; align-content: center; gap: 0; overflow: hidden; padding: 2px 5px; border: 1px solid #3d4345; border-radius: 9px; background: #272c2e; color: var(--text); text-align: left; }
 .quick-field span { color: var(--muted); font-size: 10px; }
 .quick-field strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
-.quick-date-field input { min-width: 0; height: auto; padding: 0; border: 0; background: transparent; color: var(--text); font-size: 12px; }
-.calculator-error { margin: -3px 0 6px; color: #ffb9b9; font-size: 12px; text-align: center; }
-.number-pad { display: grid; min-height: 0; flex: 1; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(4, minmax(24px, 1fr)); gap: 4px; margin: 0; }
+.quick-date-field input { min-width: 0; min-height: 0; height: 22px; padding: 0; border: 0; background: transparent; color: var(--text); font-size: 11px; line-height: 22px; }
+.calculator-error { position: absolute; z-index: 2; right: 62px; bottom: calc(5px + env(safe-area-inset-bottom)); left: 8px; overflow: hidden; margin: 0; padding: 2px 4px; border-radius: 5px; background: rgba(78, 24, 28, .94); color: #ffcece; font-size: 10px; line-height: 14px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.number-pad { display: grid; min-height: 0; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(4, minmax(24px, 1fr)); gap: 4px; margin: 0; overflow: hidden; }
 .number-pad button { min-width: 0; height: auto; min-height: 0; border: 1px solid #3d4345; border-radius: 8px; background: #363a3c; color: var(--text); font-size: clamp(14px, 4.8vw, 19px); font-variant-numeric: tabular-nums; }
 .number-pad .operator-key { background: #2b4039; color: #9ef0c6; font-weight: 850; }
 .number-pad .utility-key { background: #403536; color: #ffc1c1; font-size: 15px; font-weight: 800; }
@@ -299,6 +300,20 @@ textarea { padding: 11px; resize: vertical; }
 @media (max-width: 440px) {
   .data-actions { grid-template-columns: 1fr 1fr; }
   .data-actions > div { grid-column: 1 / -1; }
+}
+
+@media (max-height: 600px) {
+  .quick-entry-panel { grid-template-rows: 36px minmax(0, 1fr); gap: 3px; padding-top: 4px; }
+  .quick-entry-top { grid-template-columns: 48px minmax(64px, 1fr) minmax(88px, 1.1fr) 48px; gap: 3px; }
+  .type-cycle, .quick-save { border-radius: 7px; font-size: 12px; }
+  .quick-entry-top .amount-section { grid-template-rows: 7px minmax(18px, 1fr) 7px; padding-block: 0; }
+  .quick-entry-top .amount-section > span, .quick-entry-top .amount-expression { font-size: 7px; line-height: 7px; }
+  .quick-entry-top .amount-display { font-size: clamp(16px, 5.8vw, 21px); }
+  .quick-field span { font-size: 8px; line-height: 9px; }
+  .quick-date-field input { height: 19px; font-size: 10px; line-height: 19px; }
+  .number-pad { gap: 3px; }
+  .number-pad button { border-radius: 6px; font-size: clamp(12px, 4.2vw, 16px); }
+  .number-pad .utility-key { font-size: 12px; }
 }
 
 @media (max-height: 680px) {
