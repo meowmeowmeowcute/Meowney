@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/meowney-512.png" type="image/png" />
     <link rel="apple-touch-icon" href="icons/meowney-192.png" />
-    <link rel="stylesheet" href="styles.css?v=37" />
+    <link rel="stylesheet" href="styles.css?v=38" />
   </head>
   <body>
     <div class="app-shell">
@@ -322,17 +322,15 @@
       </div>
       <section id="quick-entry-panel" class="quick-entry-panel" aria-label="快速記帳操作區">
         <div class="calculation-display">
-          <button id="transaction-type-cycle" class="type-cycle" type="button" aria-label="目前支出，點擊切換為收入">支出 ↻</button>
-          <section class="amount-section" aria-labelledby="amount-label">
-            <span id="amount-label">算式</span>
+          <section class="amount-section" aria-label="算式與目前金額">
             <output id="amount-expression" class="amount-expression" aria-live="polite">0</output>
             <output id="amount-display" class="amount-display">NT$ 0</output>
           </section>
         </div>
         <div id="calculator-error" class="calculator-error" role="status" hidden></div>
         <div id="number-pad" class="number-pad" aria-label="金額計算鍵盤">
-          <button type="button" data-key="7">7</button><button type="button" data-key="8">8</button><button type="button" data-key="9">9</button><button id="operator-cycle" type="button" class="operator-key" data-key="operator-cycle" aria-label="加入加號，重複點擊可切換運算符號">+</button><button type="button" class="utility-key" data-key="AC">AC</button>
-          <button type="button" data-key="4">4</button><button type="button" data-key="5">5</button><button type="button" data-key="6">6</button><button type="button" class="utility-key" data-key="backspace" aria-label="刪除算式最後一個字元">⌫</button><button type="button" class="equals-key" data-key="=">=</button>
+          <button type="button" data-key="7">7</button><button type="button" data-key="8">8</button><button type="button" data-key="9">9</button><button id="operator-cycle" type="button" class="operator-key" data-key="operator-cycle" aria-label="加入加號，重複點擊可切換運算符號">+</button><button type="button" class="utility-key" data-key="backspace" aria-label="刪除算式最後一個字元">⌫</button>
+          <button type="button" data-key="4">4</button><button type="button" data-key="5">5</button><button type="button" data-key="6">6</button><button id="transaction-type-cycle" class="type-cycle" type="button" aria-label="目前支出，點擊切換為收入">支出 ↻</button>
           <button type="button" data-key="1">1</button><button type="button" data-key="2">2</button><button type="button" data-key="3">3</button><label class="quick-field quick-date-field"><span>日期</span><input id="date-input" type="date" /></label>
           <button type="button" data-key=".">.</button><button type="button" data-key="0">0</button><button type="button" data-key="00">00</button><button id="save-transaction" class="quick-save" type="button">確定</button>
         </div>
@@ -349,6 +347,6 @@
     </section>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script type="module" src="app.js?v=37"></script>
+    <script type="module" src="app.js?v=38"></script>
   </body>
 </html>

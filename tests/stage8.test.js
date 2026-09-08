@@ -105,6 +105,8 @@ export async function runStage8Tests() {
     assert(html.indexOf('class="number-pad"') > html.indexOf('id="category-section"') && html.includes('id="quick-entry-panel"'), '數字鍵盤未整合到底部快速操作區。');
     assert(html.indexOf('id="transaction-type-cycle"') > html.indexOf('id="quick-entry-panel"') && app.includes("const types = ['expense', 'income', 'transfer', 'debt']"), '交易類型單鍵循環切換未放在底部操作區。');
     assert(html.includes('id="operator-cycle"') && html.includes('data-key="operator-cycle"') && app.includes("const operators = ['+', '-', '×', '÷']"), '四則運算沒有合併為可循環切換的單一按鍵。');
+    assert(!html.includes('data-key="AC"') && !html.includes('data-key="="') && html.indexOf('data-key="backspace"') < html.indexOf('id="transaction-type-cycle"'), '已移除的 AC、等號或重新配置的刪除鍵仍不符合精簡版面。');
+    assert(app.includes('useGrouping: false') && !html.includes('id="amount-label"'), '新增面板仍顯示金額分隔符或多餘的算式標籤。');
     assert(/\.number-pad\s*\{[^}]*grid-template-columns:\s*repeat\(5, 1fr\)[^}]*grid-template-rows:\s*repeat\(4/.test(css) && html.includes('class="quick-field quick-date-field"'), '手機鍵盤與右側 2×4 功能區配置不完整。');
     assert(/\.quick-entry-panel\s*\{[^}]*grid-template-rows:\s*52px minmax\(0, 1fr\)[^}]*overflow:\s*hidden/.test(css) && css.includes('.calculation-display .amount-expression') && css.includes('overflow-x: auto'), '獨立算式與結果顯示列或長算式水平查看功能不存在。');
     assert(!html.includes('id="quick-category-button"') && !html.includes('id="toggle-date-time"'), '介面仍保留重複分類或額外時間展開操作。');

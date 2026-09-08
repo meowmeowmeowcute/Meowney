@@ -1,7 +1,7 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=37';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=37';
-import { calculateExpression, updateExpression } from './calculator.js?v=37';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=37';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=38';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=38';
+import { calculateExpression, updateExpression } from './calculator.js?v=38';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=38';
 
 const state = {
   repository: null,
@@ -26,6 +26,7 @@ const DEFAULT_PARENT_CATEGORIES = ['購物', '吃喝', '交通', '娛樂', '生�
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const currency = (amount) => `NT$ ${new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 2 }).format(amount)}`;
+const entryCurrency = (amount) => `NT$ ${new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 2, useGrouping: false }).format(amount)}`;
 const signedCurrency = (amount) => `${amount >= 0 ? '+' : '-'}${currency(Math.abs(amount))}`;
 const localDateValue = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const todayValue = () => localDateValue();
@@ -530,8 +531,7 @@ function renderSheet() {
   $('#transaction-type-cycle').hidden = debtSettlementReadOnly;
   $('#quick-entry-panel').hidden = debtSettlementReadOnly;
   $('#number-pad').hidden = debtSettlementReadOnly;
-  $('#amount-label').textContent = debtSettlementReadOnly ? (form.debtDirection === 'payable' ? '還款金額' : '收款金額') : '算式';
-  $('#amount-display').textContent = currency(Number(form.amountText) || 0);
+  $('#amount-display').textContent = entryCurrency(Number(form.amountText) || 0);
   $('#amount-display').scrollLeft = $('#amount-display').scrollWidth;
   $('#amount-expression').textContent = form.amountDisplayExpression || form.amountExpression || form.amountText || '0';
   $('#amount-expression').scrollLeft = $('#amount-expression').scrollWidth;
@@ -642,10 +642,10 @@ function appendAmount(key) {
   }
   const result = updateExpression(currentExpression, key);
   state.form.amountExpression = result.expression;
-  state.form.amountDisplayExpression = key === '=' && result.value !== null && !result.error ? `${currentExpression} =` : result.expression;
+  state.form.amountDisplayExpression = result.expression;
   if (result.value !== null && !result.error) state.form.amountText = String(result.value);
   else if (!result.expression) state.form.amountText = '';
-  $('#amount-display').textContent = currency(Number(state.form.amountText) || 0);
+  $('#amount-display').textContent = entryCurrency(Number(state.form.amountText) || 0);
   $('#amount-display').scrollLeft = $('#amount-display').scrollWidth;
   $('#amount-expression').textContent = state.form.amountDisplayExpression || '0';
   $('#amount-expression').scrollLeft = $('#amount-expression').scrollWidth;
