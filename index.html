@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/meowney-512.png" type="image/png" />
     <link rel="apple-touch-icon" href="icons/meowney-192.png" />
-    <link rel="stylesheet" href="styles.css?v=38" />
+    <link rel="stylesheet" href="styles.css?v=39" />
   </head>
   <body>
     <div class="app-shell">
@@ -256,7 +256,7 @@
             <button type="button" data-debt-direction="receivable" class="chip">別人欠我</button>
           </div>
           <label id="debt-amount-field" class="note-field reimbursement-amount-field" hidden><span id="debt-amount-label">欠款金額（必填）</span>
-            <input id="debt-amount-input" type="number" min="0.01" step="0.01" inputmode="decimal" autocomplete="off" placeholder="例如：300" />
+            <input id="debt-amount-input" type="text" inputmode="none" autocomplete="off" placeholder="點擊輸入金額" readonly />
           </label>
           <p id="debt-impact" class="debt-impact" hidden></p>
         </section>
@@ -268,16 +268,6 @@
           <button id="fill-debt-remaining" class="text-action debt-fill-action" type="button">填入全部未結清金額</button>
           <h3>使用帳戶 <em>必填</em></h3><div id="debt-settlement-accounts" class="chip-row"></div>
           <button id="save-debt-settlement" class="button button--secondary button--full" type="button">登記</button>
-        </section>
-
-        <section id="planned-claim-section" class="entry-section reimbursement-section planned-claim-section" aria-labelledby="planned-claim-label" hidden>
-          <div class="field-label">
-            <h3 id="planned-claim-label">請款狀態</h3>
-            <span>報銷後自動取消</span>
-          </div>
-          <button id="planned-claim-toggle" class="reimbursement-toggle" type="button" aria-pressed="false">
-            <span><b>預計請款</b><small id="planned-claim-toggle-status">報銷後會自動取消這個標記</small></span><i aria-hidden="true">＋</i>
-          </button>
         </section>
 
         <p id="claim-submitted-info" class="reimbursement-linked-info claim-submitted-info" hidden></p>
@@ -297,7 +287,7 @@
             <span><b>新增報銷</b><small id="reimbursement-toggle-status">不產生報銷收入</small></span><i aria-hidden="true">＋</i>
           </button>
           <label id="reimbursement-amount-field" class="note-field reimbursement-amount-field" hidden>報銷金額（必填）
-            <input id="reimbursement-amount-input" type="text" inputmode="decimal" autocomplete="off" placeholder="例如：500" />
+            <input id="reimbursement-amount-input" type="text" inputmode="none" autocomplete="off" placeholder="點擊輸入金額" readonly />
           </label>
           <label id="reimbursement-note-field" class="note-field reimbursement-note-field" hidden>報銷備註（選填）
             <textarea id="reimbursement-note-input" rows="2" placeholder="例如：已送件、預計入帳日"></textarea>
@@ -326,6 +316,7 @@
             <output id="amount-expression" class="amount-expression" aria-live="polite">0</output>
             <output id="amount-display" class="amount-display">NT$ 0</output>
           </section>
+          <button id="planned-claim-toggle" class="quick-claim-toggle" type="button" aria-pressed="false"><span>預計請款</span><i aria-hidden="true">＋</i></button>
         </div>
         <div id="calculator-error" class="calculator-error" role="status" hidden></div>
         <div id="number-pad" class="number-pad" aria-label="金額計算鍵盤">
@@ -335,6 +326,23 @@
           <button type="button" data-key=".">.</button><button type="button" data-key="0">0</button><button type="button" data-key="00">00</button><button id="save-transaction" class="quick-save" type="button">確定</button>
         </div>
       </section>
+    </section>
+
+    <section id="amount-editor" class="amount-editor" role="dialog" aria-modal="true" aria-labelledby="amount-editor-title" hidden>
+      <div class="amount-editor__panel">
+        <header class="amount-editor__header"><h2 id="amount-editor-title">輸入金額</h2><button id="close-amount-editor" type="button" aria-label="取消金額修改">×</button></header>
+        <section class="amount-editor__display" aria-label="目前算式與結果">
+          <output id="amount-editor-expression" aria-live="polite">0</output>
+          <output id="amount-editor-result">NT$ 0</output>
+          <p id="amount-editor-error" role="status" hidden></p>
+        </section>
+        <div class="amount-editor__keypad" aria-label="金額計算鍵盤">
+          <button type="button" data-editor-key="7">7</button><button type="button" data-editor-key="8">8</button><button type="button" data-editor-key="9">9</button><button id="amount-editor-operator" class="operator-key" type="button" data-editor-key="operator-cycle">+</button><button class="utility-key" type="button" data-editor-key="AC">AC</button>
+          <button type="button" data-editor-key="4">4</button><button type="button" data-editor-key="5">5</button><button type="button" data-editor-key="6">6</button><button class="utility-key" type="button" data-editor-key="backspace" aria-label="刪除最後一個字元">⌫</button><button class="equals-key" type="button" data-editor-key="=">=</button>
+          <button type="button" data-editor-key="1">1</button><button type="button" data-editor-key="2">2</button><button type="button" data-editor-key="3">3</button><button id="confirm-amount-editor" class="amount-editor__confirm" type="button">確定</button>
+          <button type="button" data-editor-key=".">.</button><button type="button" data-editor-key="0">0</button><button type="button" data-editor-key="00">00</button>
+        </div>
+      </div>
     </section>
 
     <section id="confirm-dialog" class="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" hidden>
@@ -347,6 +355,6 @@
     </section>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script type="module" src="app.js?v=38"></script>
+    <script type="module" src="app.js?v=39"></script>
   </body>
 </html>

@@ -232,9 +232,6 @@ textarea { padding: 11px; resize: vertical; }
 .debt-overview-list small { margin-top: 3px; color: var(--muted); font-size: 11px; }
 .debt-overview-list strong { color: #efd094; font-size: 13px; white-space: nowrap; }
 .reimbursement-section { padding: 13px; border: 1px solid #334840; border-radius: 15px; background: linear-gradient(135deg, rgba(29, 61, 49, .56), rgba(29, 35, 36, .72)); }
-.planned-claim-section { border-color: #5d4b2b; background: linear-gradient(135deg, rgba(76, 57, 24, .54), rgba(31, 35, 34, .72)); }
-.planned-claim-section .reimbursement-toggle--active { border-color: #e8bd6a; background: #4a3a1d; }
-.planned-claim-section .reimbursement-toggle--active i { border-color: #e8bd6a; background: #e8bd6a; color: #261d0d; }
 .reimbursement-section .field-label { margin-bottom: 8px; }
 .reimbursement-toggle { display: flex; width: 100%; min-height: 54px; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid #3d4948; border-radius: 12px; background: #232a2a; color: var(--text); text-align: left; }
 .reimbursement-toggle span { display: grid; gap: 3px; }
@@ -246,6 +243,7 @@ textarea { padding: 11px; resize: vertical; }
 .reimbursement-toggle--active i::after { content: '✓'; font-size: 15px; font-weight: 900; }
 .reimbursement-amount-field { margin-top: 11px; }
 .reimbursement-amount-field input { font-size: 17px; font-variant-numeric: tabular-nums; text-align: right; }
+.reimbursement-amount-field input[readonly] { cursor: pointer; }
 .reimbursement-note-field { margin-top: 11px; }
 .reimbursement-linked-info { margin: 18px 0 0; padding: 11px 12px; border: 1px solid #3c594d; border-radius: 12px; background: #1d3029; color: #c4dfd1; font-size: 12px; line-height: 1.45; }
 .claim-submitted-info { border-color: #38566b; background: #172a35; color: #c6e7ff; }
@@ -267,7 +265,7 @@ textarea { padding: 11px; resize: vertical; }
 .form-error { margin: 12px 0 0; color: #ffc0c0; font-size: 13px; }
 .validation-target--invalid { border-radius: 15px; outline: 2px solid #df7777; outline-offset: 5px; }
 .quick-entry-panel { position: relative; z-index: 3; display: grid; max-height: 33.333dvh; min-height: 0; flex: 0 0 33.333dvh; grid-template-rows: 52px minmax(0, 1fr); gap: 4px; overflow: hidden; padding: 5px 8px calc(5px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: #171a1c; box-shadow: 0 -8px 18px rgba(0, 0, 0, .28); }
-.calculation-display { display: grid; min-width: 0; min-height: 0; overflow: hidden; }
+.calculation-display { display: grid; min-width: 0; min-height: 0; grid-template-columns: minmax(0, 1fr) 86px; gap: 5px; overflow: hidden; }
 .type-cycle, .quick-save { min-width: 0; min-height: 0; height: 100%; padding: 0 3px; border: 0; border-radius: 9px; font-size: 13px; font-weight: 850; }
 .type-cycle { background: #454a4c; color: var(--text); }
 .quick-save { background: var(--accent); color: var(--accent-ink); }
@@ -276,6 +274,11 @@ textarea { padding: 11px; resize: vertical; }
 .calculation-display .amount-expression::-webkit-scrollbar { display: none; }
 .calculation-display .amount-display { grid-column: 1 / -1; grid-row: 2; max-width: 100%; overflow-x: auto; overflow-y: hidden; font-size: clamp(22px, 7vw, 30px); line-height: 30px; scrollbar-width: none; white-space: nowrap; }
 .calculation-display .amount-display::-webkit-scrollbar { display: none; }
+.quick-claim-toggle { display: grid; min-width: 0; min-height: 0; place-content: center; gap: 2px; padding: 2px 4px; border: 1px solid #6b5730; border-radius: 9px; background: #332b1d; color: #f0d49a; font-size: 10px; font-weight: 800; }
+.quick-claim-toggle i { font-size: 16px; font-style: normal; line-height: 15px; }
+.quick-claim-toggle--active { border-color: #e8bd6a; background: #59451f; color: #fff0c9; }
+.quick-claim-toggle--active i { font-size: 0; }
+.quick-claim-toggle--active i::after { content: '✓'; font-size: 16px; }
 .quick-field { display: grid; min-width: 0; min-height: 0; height: 100%; align-content: center; gap: 0; overflow: hidden; padding: 2px 5px; border: 1px solid #3d4345; border-radius: 9px; background: #272c2e; color: var(--text); text-align: left; }
 .quick-field span { color: var(--muted); font-size: 10px; }
 .quick-field strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
@@ -289,6 +292,23 @@ textarea { padding: 11px; resize: vertical; }
 .number-pad .operator-key { background: #2b4039; color: #9ef0c6; font-weight: 850; }
 .number-pad .utility-key { background: #403536; color: #ffc1c1; font-size: 15px; font-weight: 800; }
 .number-pad button:active { background: #51585a; }
+.amount-editor { position: fixed; z-index: 18; inset: 0; display: grid; align-items: end; padding: 12px max(8px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); background: rgba(0, 0, 0, .62); }
+.amount-editor__panel { display: grid; width: min(100%, 520px); max-height: min(72dvh, 520px); grid-template-rows: auto 72px minmax(188px, 1fr); gap: 7px; margin: 0 auto; padding: 10px; border: 1px solid #46504d; border-radius: 18px; background: #171b1c; box-shadow: 0 18px 54px rgba(0, 0, 0, .55); }
+.amount-editor__header { display: flex; min-height: 38px; align-items: center; justify-content: space-between; }
+.amount-editor__header h2 { margin: 0; font-size: 18px; }
+.amount-editor__header button { display: grid; width: 38px; height: 38px; place-items: center; padding: 0; border: 1px solid #50625d; border-radius: 50%; background: #28312f; color: var(--text); font-size: 26px; line-height: 1; }
+.amount-editor__display { position: relative; display: grid; min-width: 0; grid-template-rows: 25px 42px; padding: 2px 6px; border-radius: 11px; background: #101314; }
+#amount-editor-expression, #amount-editor-result { min-width: 0; overflow-x: auto; overflow-y: hidden; font-variant-numeric: tabular-nums; scrollbar-width: none; white-space: nowrap; }
+#amount-editor-expression { color: #cbd5d1; font-size: 16px; line-height: 25px; }
+#amount-editor-result { font-size: 30px; font-weight: 850; line-height: 42px; }
+#amount-editor-expression::-webkit-scrollbar, #amount-editor-result::-webkit-scrollbar { display: none; }
+#amount-editor-error { position: absolute; right: 6px; bottom: 3px; left: 6px; margin: 0; padding: 3px; border-radius: 5px; background: #512b2e; color: #ffd1d1; font-size: 11px; text-align: center; }
+.amount-editor__keypad { display: grid; min-height: 0; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(4, minmax(42px, 1fr)); gap: 5px; }
+.amount-editor__keypad button { min-width: 0; min-height: 0; border: 1px solid #3d4345; border-radius: 9px; background: #363a3c; color: var(--text); font-size: 18px; font-variant-numeric: tabular-nums; }
+.amount-editor__keypad .operator-key { background: #2b4039; color: #9ef0c6; font-weight: 850; }
+.amount-editor__keypad .utility-key { background: #403536; color: #ffc1c1; font-size: 15px; font-weight: 800; }
+.amount-editor__keypad .equals-key { background: #315b4c; color: #d6ffeb; font-weight: 900; }
+.amount-editor__confirm { grid-column: span 2; grid-row: span 2; background: var(--accent) !important; color: var(--accent-ink) !important; font-weight: 900; }
 .confirm-dialog { position: fixed; z-index: 13; right: 22px; bottom: 30px; left: 22px; max-width: 420px; margin: auto; padding: 20px; border: 1px solid #77454a; border-radius: 18px; background: #292124; box-shadow: 0 14px 44px rgba(0, 0, 0, .48); }
 .confirm-dialog h2 { margin-bottom: 8px; }
 .confirm-dialog p { color: #dfc7c9; font-size: 14px; line-height: 1.5; }
@@ -316,6 +336,13 @@ textarea { padding: 11px; resize: vertical; }
   .number-pad { gap: 3px; }
   .number-pad button { border-radius: 6px; font-size: clamp(12px, 4.2vw, 16px); }
   .number-pad .utility-key { font-size: 12px; }
+  .calculation-display { grid-template-columns: minmax(0, 1fr) 74px; gap: 3px; }
+  .quick-claim-toggle { font-size: 9px; }
+  .amount-editor__panel { max-height: calc(100dvh - 16px); grid-template-rows: auto 58px minmax(160px, 1fr); gap: 5px; padding: 8px; }
+  .amount-editor__display { grid-template-rows: 20px 34px; }
+  #amount-editor-expression { font-size: 14px; line-height: 20px; }
+  #amount-editor-result { font-size: 25px; line-height: 34px; }
+  .amount-editor__keypad { grid-template-rows: repeat(4, minmax(36px, 1fr)); gap: 4px; }
 }
 
 @media (max-height: 680px) {

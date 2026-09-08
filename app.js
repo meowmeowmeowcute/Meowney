@@ -1,7 +1,7 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=38';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=38';
-import { calculateExpression, updateExpression } from './calculator.js?v=38';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=38';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=39';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=39';
+import { calculateExpression, updateExpression } from './calculator.js?v=39';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=39';
 
 const state = {
   repository: null,
@@ -18,6 +18,7 @@ const state = {
   claimSelectionStatus: null,
   claimCandidates: [],
   transactionDefaults: {},
+  amountEditor: null,
 };
 let sheetDrag = null;
 
@@ -467,6 +468,7 @@ function closeSheet({ updateHistory = true } = {}) {
   sheet.style.transform = '';
   sheet.classList.remove('bottom-sheet--dragging');
   $('#transaction-sheet').hidden = true;
+  closeAmountEditor();
   $('#sheet-overlay').hidden = true;
   $('#confirm-dialog').hidden = true;
   document.body.style.overflow = '';
@@ -544,7 +546,7 @@ function renderSheet() {
   $('#category-section').hidden = form.type !== 'expense';
   $('#single-account-section').hidden = form.type === 'transfer' || reimbursementReadOnly || debtSettlementReadOnly;
   $('#transfer-account-section').hidden = form.type !== 'transfer';
-  $('#planned-claim-section').hidden = form.type !== 'expense' || reimbursementReadOnly || batchReimbursementSource || Boolean(form.debtDirection);
+  $('#planned-claim-toggle').hidden = form.type !== 'expense' || reimbursementReadOnly || batchReimbursementSource || Boolean(form.debtDirection);
   $('#claim-submitted-info').hidden = !batchReimbursementSource && !batchReimbursementReadOnly;
   $('#claim-submitted-info').textContent = batchReimbursementSource
     ? '此筆已包含在合併報銷中；修改金額或備註後，合併報銷的金額與項目清單會同步更新。'
@@ -580,8 +582,7 @@ function renderSheet() {
       ? `本次帳戶先扣 ${currency(Math.max(totalAmount - debtAmount, 0))}，另有 ${currency(debtAmount)} 待還；支出計 ${currency(totalAmount)}。`
       : `本次帳戶扣 ${currency(totalAmount)}，其中 ${currency(debtAmount)} 待收；支出計 ${currency(Math.max(totalAmount - debtAmount, 0))}。`;
   $('#planned-claim-toggle').setAttribute('aria-pressed', String(form.isPlannedClaim));
-  $('#planned-claim-toggle').classList.toggle('reimbursement-toggle--active', form.isPlannedClaim);
-  $('#planned-claim-toggle-status').textContent = form.isPlannedClaim ? '可在查詢中查看尚未請款的支出' : '報銷後會自動取消這個標記';
+  $('#planned-claim-toggle').classList.toggle('quick-claim-toggle--active', form.isPlannedClaim);
   $('#reimbursement-linked-info').hidden = !reimbursementReadOnly || batchReimbursementReadOnly;
   $('#reimbursement-toggle').setAttribute('aria-pressed', String(form.reimbursementEnabled));
   $('#reimbursement-toggle').classList.toggle('reimbursement-toggle--active', form.reimbursementEnabled);
@@ -635,12 +636,9 @@ function renderSheet() {
 
 function appendAmount(key) {
   const currentExpression = state.form.amountExpression ?? state.form.amountText;
-  if (key === 'operator-cycle') {
-    const operators = ['+', '-', '×', '÷'];
-    const currentOperator = operators.includes(currentExpression.at(-1)) ? currentExpression.at(-1) : null;
-    key = currentOperator ? operators[(operators.indexOf(currentOperator) + 1) % operators.length] : operators[0];
-  }
-  const result = updateExpression(currentExpression, key);
+  const applied = calculatorKey(currentExpression, key);
+  key = applied.key;
+  const result = applied.result;
   state.form.amountExpression = result.expression;
   state.form.amountDisplayExpression = result.expression;
   if (result.value !== null && !result.error) state.form.amountText = String(result.value);
@@ -662,12 +660,75 @@ function appendAmount(key) {
   }
 }
 
+function calculatorKey(expression, key) {
+  if (key !== 'operator-cycle') return { key, result: updateExpression(expression, key) };
+  const operators = ['+', '-', '×', '÷'];
+  const currentOperator = operators.includes(expression.at(-1)) ? expression.at(-1) : null;
+  const nextKey = currentOperator ? operators[(operators.indexOf(currentOperator) + 1) % operators.length] : operators[0];
+  return { key: nextKey, result: updateExpression(expression, nextKey) };
+}
+
 function updateOperatorCycle(expression = '') {
   const operators = ['+', '-', '×', '÷'];
   const currentOperator = operators.includes(expression.at(-1)) ? expression.at(-1) : '+';
   const nextOperator = operators[(operators.indexOf(currentOperator) + 1) % operators.length];
   $('#operator-cycle').textContent = currentOperator;
   $('#operator-cycle').setAttribute('aria-label', `目前運算符號${currentOperator}，再次點擊切換為${nextOperator}`);
+}
+
+function renderAmountEditor() {
+  const editor = state.amountEditor;
+  if (!editor) return;
+  const calculation = calculateExpression(editor.expression);
+  $('#amount-editor-expression').textContent = editor.expression || '0';
+  $('#amount-editor-expression').scrollLeft = $('#amount-editor-expression').scrollWidth;
+  $('#amount-editor-result').textContent = entryCurrency(calculation.value ?? (Number(editor.expression) || 0));
+  $('#amount-editor-error').hidden = !editor.error;
+  $('#amount-editor-error').textContent = editor.error || '';
+  const operators = ['+', '-', '×', '÷'];
+  const currentOperator = operators.includes(editor.expression.at(-1)) ? editor.expression.at(-1) : '+';
+  $('#amount-editor-operator').textContent = currentOperator;
+  $('#amount-editor-operator').setAttribute('aria-label', `目前運算符號${currentOperator}，重複點擊可切換`);
+}
+
+function openAmountEditor(field, title) {
+  if (!state.form) return;
+  const original = String(state.form[field] || '');
+  state.amountEditor = { field, title, original, expression: original, error: null };
+  $('#amount-editor-title').textContent = title;
+  $('#transaction-sheet').inert = true;
+  $('#amount-editor').hidden = false;
+  renderAmountEditor();
+  setTimeout(() => $('#close-amount-editor').focus(), 0);
+}
+
+function closeAmountEditor() {
+  $('#amount-editor').hidden = true;
+  $('#transaction-sheet').inert = false;
+  state.amountEditor = null;
+}
+
+function appendEditorAmount(key) {
+  if (!state.amountEditor) return;
+  const applied = calculatorKey(state.amountEditor.expression, key);
+  state.amountEditor.expression = applied.result.expression;
+  state.amountEditor.error = applied.result.error;
+  renderAmountEditor();
+}
+
+function confirmAmountEditor() {
+  const editor = state.amountEditor;
+  if (!editor || !state.form) return;
+  const calculation = calculateExpression(editor.expression);
+  if (calculation.error || calculation.value === null || calculation.value <= 0) {
+    editor.error = calculation.error || '請輸入大於 0 的金額';
+    return renderAmountEditor();
+  }
+  state.form[editor.field] = String(calculation.value);
+  if (editor.field === 'reimbursementAmountText') state.form.reimbursementAmountTouched = true;
+  if (editor.field === 'debtAmountText') state.form.debtAmountTouched = true;
+  closeAmountEditor();
+  renderSheet();
 }
 
 function validationError() {
@@ -1182,6 +1243,10 @@ function initialiseEvents() {
     state.form.reimbursementEnabled = false;
     if (state.form.type === 'expense' && state.form.debtDirection && !state.form.debtAmountText) state.form.debtAmountText = state.form.amountText;
     renderSheet();
+    if (state.form.type === 'expense' && state.form.debtDirection) {
+      const title = state.form.debtDirection === 'payable' ? '我欠別人的金額' : '別人欠我的金額';
+      openAmountEditor('debtAmountText', title);
+    }
   }));
   $$('.number-pad button[data-key]').forEach((button) => button.addEventListener('click', () => appendAmount(button.dataset.key)));
   $('#note-input').addEventListener('input', (event) => {
@@ -1204,11 +1269,11 @@ function initialiseEvents() {
     state.form.isPlannedClaim = !state.form.isPlannedClaim;
     renderSheet();
   });
-  $('#reimbursement-amount-input').addEventListener('input', (event) => {
-    state.form.reimbursementAmountText = event.target.value;
-    state.form.reimbursementAmountTouched = true;
-  });
-  $('#debt-amount-input').addEventListener('input', (event) => { state.form.debtAmountText = event.target.value; state.form.debtAmountTouched = true; });
+  $('#reimbursement-amount-input').addEventListener('click', () => openAmountEditor('reimbursementAmountText', '報銷金額'));
+  $('#debt-amount-input').addEventListener('click', () => openAmountEditor('debtAmountText', state.form?.debtDirection === 'receivable' ? '別人欠我的金額' : '我欠別人的金額'));
+  $('#close-amount-editor').addEventListener('click', closeAmountEditor);
+  $('#confirm-amount-editor').addEventListener('click', confirmAmountEditor);
+  $$('[data-editor-key]').forEach((button) => button.addEventListener('click', () => appendEditorAmount(button.dataset.editorKey)));
   $('#reimbursement-note-input').addEventListener('input', (event) => { state.form.reimbursementNote = event.target.value; state.form.reimbursementNoteTouched = true; });
   $('#date-input').addEventListener('input', (event) => { state.form.date = event.target.value; });
   $('#time-input').addEventListener('input', (event) => { state.form.time = event.target.value; });
@@ -1281,6 +1346,11 @@ function initialiseEvents() {
     } catch (error) { showToast(error.message || '儲存子類別時發生問題。'); }
   });
   document.addEventListener('keydown', (event) => {
+    if (!$('#amount-editor').hidden) {
+      if (event.key === 'Escape') closeAmountEditor();
+      else trapFocus(event, $('#amount-editor'));
+      return;
+    }
     if (!$('#confirm-dialog').hidden) {
       if (event.key === 'Escape') closeDeleteConfirm();
       else trapFocus(event, $('#confirm-dialog'));

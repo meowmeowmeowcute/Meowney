@@ -60,7 +60,7 @@ export async function runStage8Tests() {
   });
   await test('預計請款可查詢，且報銷會取消原支出的狀態', async () => {
     const [app, html, dataLayer] = await Promise.all([read('app.js'), read('index.html'), read('data-layer.js')]);
-    assert(html.includes('id="planned-claim-toggle"') && html.includes('id="query-claim-status"') && html.includes('id="planned-claim-query-list"'), '預計請款切換或查詢結果入口不存在。');
+    assert(html.indexOf('id="planned-claim-toggle"') > html.indexOf('class="calculation-display"') && html.includes('id="query-claim-status"') && html.includes('id="planned-claim-query-list"'), '預計請款未整合到金額顯示區右側，或查詢入口不存在。');
     assert(app.includes("claimStatus: $('#query-claim-status').value") && app.includes("state.form.isPlannedClaim = !state.form.isPlannedClaim"), '預計請款表單或查詢沒有連接。');
     assert(dataLayer.includes('isPlannedClaim: false, claimBatchId: null, claimNote: null, reimbursementTransactionId: reimbursement.id'), '新增報銷時沒有自動取消預計請款。');
   });
@@ -107,6 +107,8 @@ export async function runStage8Tests() {
     assert(html.includes('id="operator-cycle"') && html.includes('data-key="operator-cycle"') && app.includes("const operators = ['+', '-', '×', '÷']"), '四則運算沒有合併為可循環切換的單一按鍵。');
     assert(!html.includes('data-key="AC"') && !html.includes('data-key="="') && html.indexOf('data-key="backspace"') < html.indexOf('id="transaction-type-cycle"'), '已移除的 AC、等號或重新配置的刪除鍵仍不符合精簡版面。');
     assert(app.includes('useGrouping: false') && !html.includes('id="amount-label"'), '新增面板仍顯示金額分隔符或多餘的算式標籤。');
+    assert(html.includes('id="amount-editor"') && html.includes('data-editor-key="AC"') && html.includes('data-editor-key="="') && app.includes('function calculatorKey') && app.includes('function confirmAmountEditor'), '報銷與借欠共用的隔離金額計算浮層不完整。');
+    assert(app.includes("openAmountEditor('reimbursementAmountText'") && app.includes("openAmountEditor('debtAmountText'") && app.includes('state.amountEditor = { field, title, original, expression: original'), '額外金額欄位沒有使用獨立暫存狀態。');
     assert(/\.number-pad\s*\{[^}]*grid-template-columns:\s*repeat\(5, 1fr\)[^}]*grid-template-rows:\s*repeat\(4/.test(css) && html.includes('class="quick-field quick-date-field"'), '手機鍵盤與右側 2×4 功能區配置不完整。');
     assert(/\.quick-entry-panel\s*\{[^}]*grid-template-rows:\s*52px minmax\(0, 1fr\)[^}]*overflow:\s*hidden/.test(css) && css.includes('.calculation-display .amount-expression') && css.includes('overflow-x: auto'), '獨立算式與結果顯示列或長算式水平查看功能不存在。');
     assert(!html.includes('id="quick-category-button"') && !html.includes('id="toggle-date-time"'), '介面仍保留重複分類或額外時間展開操作。');
