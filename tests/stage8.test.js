@@ -45,7 +45,7 @@ export async function runStage8Tests() {
     assert(queryLogic.includes("!['expense', 'income'].includes(transaction.type)") && queryLogic.includes("transaction.debtDirection === 'receivable'"), '借貸仍可能重複計入收入支出。');
     assert(app.includes('renderDebtOverview()') && app.includes('saveDebtSettlement') && css.includes('.more-options'), '借貸摘要、結清操作或精簡表單未接上。');
     assert(html.includes('id="fill-debt-remaining"') && app.includes('借入後帳戶增加') && app.includes('借出後帳戶減少'), '獨立借貸缺少明確現金流說明或快速結清。');
-    assert(app.includes("button.dataset.type === 'debt') $('#more-options').open = true") && !app.includes("$('#more-options').addEventListener('toggle'"), '借貸欄位可能因展開狀態競爭而消失。');
+    assert(!html.includes('<details id="more-options"') && !html.includes('<summary>更多設定'), '交易詳細設定仍需額外展開操作。');
     assert(app.includes("transaction.type !== 'debt-settlement'") && app.includes('查看／刪除'), '結清紀錄仍可能重複顯示備註或缺少可理解的操作提示。');
     assert(html.includes('id="debt-settlement-summary"') && app.includes("$('#number-pad').hidden = debtSettlementReadOnly") && app.includes("$('#more-options').hidden = debtSettlementReadOnly"), '結清明細仍顯示無法操作的交易輸入控制項。');
     assert(app.includes("'借入待還'") && app.includes("'借出待收'"), '獨立借貸在紀錄或摘要仍使用容易混淆的消費欠款名稱。');
@@ -103,6 +103,8 @@ export async function runStage8Tests() {
   await test('高頻記帳、首次使用、驗證與返回流程已完成便利性改善', async () => {
     const [app, html, css, requirements, uxNotes] = await Promise.all([read('app.js'), read('index.html'), read('styles.css'), read('PROJECT_REQUIREMENTS.md'), read('UX_IMPROVEMENTS.md')]);
     assert(html.indexOf('class="number-pad"') > html.indexOf('id="category-section"') && html.includes('id="quick-entry-panel"'), '數字鍵盤未整合到底部快速操作區。');
+    assert(html.indexOf('id="transaction-type-switch"') > html.indexOf('id="quick-entry-panel"') && /\.type-switch\s*\{[^}]*grid-template-columns:\s*repeat\(2, 1fr\)/.test(css), '交易類型未放在底部田字型操作區。');
+    assert(!html.includes('id="quick-category-button"') && !html.includes('id="toggle-date-time"'), '介面仍保留重複分類或額外時間展開操作。');
     assert(/\.sheet-actions\s*\{[^}]*flex:\s*0 0 auto/.test(css) && html.indexOf('class="sheet-actions"') > html.indexOf('id="form-error"'), '交易確認操作未與可捲動內容分離。');
     assert(app.includes("setSetting('transaction-defaults'") && app.includes('validExpenseCategory') && app.includes('state.selectedAccountId'), '帳戶或類別預設沒有安全保存與驗證。');
     assert(app.includes('data-open-account-setup') && app.includes("account?.initialBalance ?? '0'"), '首次使用入口或初始餘額預設不存在。');

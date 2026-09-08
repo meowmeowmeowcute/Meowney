@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/meowney-512.png" type="image/png" />
     <link rel="apple-touch-icon" href="icons/meowney-192.png" />
-    <link rel="stylesheet" href="styles.css?v=30" />
+    <link rel="stylesheet" href="styles.css?v=33" />
   </head>
   <body>
     <div class="app-shell">
@@ -223,13 +223,6 @@
       </header>
 
       <div class="sheet-body">
-        <div id="transaction-type-switch" class="type-switch" role="group" aria-label="交易類型">
-          <button type="button" data-type="expense" class="type-switch__item type-switch__item--active">支出</button>
-          <button type="button" data-type="income" class="type-switch__item">收入</button>
-          <button type="button" data-type="transfer" class="type-switch__item">轉帳</button>
-          <button type="button" data-type="debt" class="type-switch__item">借貸</button>
-        </div>
-
         <section id="debt-settlement-summary" class="debt-settlement-summary" hidden></section>
 
         <section id="category-section" class="entry-section category-section" aria-labelledby="parent-category-label">
@@ -253,8 +246,7 @@
           <div id="target-account-options" class="chip-row"></div>
         </section>
 
-        <details id="more-options" class="more-options">
-          <summary>更多設定 <small>備註、報銷、借貸、日期</small></summary>
+        <section id="more-options" class="more-options" aria-label="交易詳細設定">
           <div class="more-options__body">
         <section id="debt-section" class="entry-section reimbursement-section debt-section" aria-labelledby="debt-label" hidden>
           <div class="field-label"><h3 id="debt-label">借貸狀態</h3><span id="debt-guidance">這筆支出是否包含欠款</span></div>
@@ -318,25 +310,29 @@
           <textarea id="note-input" rows="2" placeholder="例如：午餐、薪水入帳"></textarea>
         </label>
 
-        <button id="toggle-date-time" class="date-toggle" type="button"><span>時間設定</span><strong id="date-time-summary"></strong><i aria-hidden="true">›</i></button>
-        <div id="date-time-fields" class="date-time-fields" hidden>
+        <div id="date-time-fields" class="date-time-fields">
           <label>時間<input id="time-input" type="time" /></label>
         </div>
           </div>
-        </details>
+        </section>
 
         <p id="form-error" class="form-error" role="alert" hidden></p>
 
       </div>
       <section id="quick-entry-panel" class="quick-entry-panel" aria-label="快速記帳操作區">
-        <div class="quick-entry-summary">
-          <section class="amount-section" aria-labelledby="amount-label">
-            <span id="amount-label">金額</span>
-            <output id="amount-display" class="amount-display">NT$ 0</output>
-            <output id="amount-expression" class="amount-expression" aria-live="polite"></output>
-          </section>
-          <div class="quick-fields">
-            <button id="quick-category-button" class="quick-field" type="button"><span>分類</span><strong id="quick-category-value">請選擇</strong></button>
+        <div class="quick-entry-top">
+          <div id="transaction-type-switch" class="type-switch" role="group" aria-label="交易類型">
+            <button type="button" data-type="expense" class="type-switch__item type-switch__item--active">支出</button>
+            <button type="button" data-type="income" class="type-switch__item">收入</button>
+            <button type="button" data-type="transfer" class="type-switch__item">轉帳</button>
+            <button type="button" data-type="debt" class="type-switch__item">借貸</button>
+          </div>
+          <div class="quick-entry-summary">
+            <section class="amount-section" aria-labelledby="amount-label">
+              <span id="amount-label">金額</span>
+              <output id="amount-display" class="amount-display">NT$ 0</output>
+              <output id="amount-expression" class="amount-expression" aria-live="polite"></output>
+            </section>
             <label class="quick-field quick-date-field"><span>日期</span><input id="date-input" type="date" /></label>
           </div>
         </div>
@@ -364,6 +360,6 @@
     </section>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script type="module" src="app.js?v=30"></script>
+    <script type="module" src="app.js?v=33"></script>
   </body>
 </html>
