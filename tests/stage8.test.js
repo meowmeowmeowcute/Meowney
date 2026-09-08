@@ -36,7 +36,7 @@ export async function runStage8Tests() {
     assert(app.includes('transactionNoteMarkup(transaction)'), '交易紀錄未輸出備註。');
     assert(html.includes('id="category-guidance"'), '其他類別缺少免子類別提示。');
     assert(app.includes("form.type === 'expense' ? { ...input, parentCategoryId: form.parentId, subcategoryId: form.categoryId") && app.includes("form.type === 'debt' ? { ...input, debtDirection: form.debtDirection } : input"), '收入表單仍送出類別關聯，或借貸表單未獨立處理。');
-    assert(/\.amount-section\s*\{[^}]*position:\s*sticky/.test(css) && /\.transaction-note\s*\{[^}]*white-space:\s*pre-wrap/.test(css), '金額區或完整備註顯示樣式缺失。');
+    assert(css.includes('.quick-entry-panel') && /\.transaction-note\s*\{[^}]*white-space:\s*pre-wrap/.test(css), '底部快速記帳區或完整備註顯示樣式缺失。');
   });
   await test('借貸支援消費欠款、獨立借貸、部分結清與手機快速操作', async () => {
     const [app, html, dataLayer, queryLogic, css] = await Promise.all([read('app.js'), read('index.html'), read('data-layer.js'), read('query-logic.js'), read('styles.css')]);
@@ -102,7 +102,7 @@ export async function runStage8Tests() {
   });
   await test('高頻記帳、首次使用、驗證與返回流程已完成便利性改善', async () => {
     const [app, html, css, requirements, uxNotes] = await Promise.all([read('app.js'), read('index.html'), read('styles.css'), read('PROJECT_REQUIREMENTS.md'), read('UX_IMPROVEMENTS.md')]);
-    assert(html.indexOf('class="number-pad"') < html.indexOf('id="category-section"'), '數字鍵盤未移到高頻欄位前方。');
+    assert(html.indexOf('class="number-pad"') > html.indexOf('id="category-section"') && html.includes('id="quick-entry-panel"'), '數字鍵盤未整合到底部快速操作區。');
     assert(/\.sheet-actions\s*\{[^}]*flex:\s*0 0 auto/.test(css) && html.indexOf('class="sheet-actions"') > html.indexOf('id="form-error"'), '交易確認操作未與可捲動內容分離。');
     assert(app.includes("setSetting('transaction-defaults'") && app.includes('validExpenseCategory') && app.includes('state.selectedAccountId'), '帳戶或類別預設沒有安全保存與驗證。');
     assert(app.includes('data-open-account-setup') && app.includes("account?.initialBalance ?? '0'"), '首次使用入口或初始餘額預設不存在。');

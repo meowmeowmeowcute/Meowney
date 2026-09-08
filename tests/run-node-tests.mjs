@@ -8,6 +8,7 @@ const suites = [
   { name: 'stage6', module: './stage6.test.js', exported: 'runStage6Tests' },
   { name: 'stage7', module: './stage7.test.js', exported: 'runStage7Tests' },
   { name: 'stage8', module: './stage8.test.js', exported: 'runStage8Tests' },
+  { name: 'calculator', module: './calculator.test.js', exported: 'runCalculatorTests' },
 ];
 
 const requested = new Set(process.argv.slice(2));
