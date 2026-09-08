@@ -1,7 +1,7 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=36';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=36';
-import { calculateExpression, updateExpression } from './calculator.js?v=36';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=36';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=37';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=37';
+import { calculateExpression, updateExpression } from './calculator.js?v=37';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=37';
 
 const state = {
   repository: null,
@@ -530,9 +530,12 @@ function renderSheet() {
   $('#transaction-type-cycle').hidden = debtSettlementReadOnly;
   $('#quick-entry-panel').hidden = debtSettlementReadOnly;
   $('#number-pad').hidden = debtSettlementReadOnly;
-  $('#amount-label').textContent = debtSettlementReadOnly ? (form.debtDirection === 'payable' ? '還款金額' : '收款金額') : '金額';
+  $('#amount-label').textContent = debtSettlementReadOnly ? (form.debtDirection === 'payable' ? '還款金額' : '收款金額') : '算式';
   $('#amount-display').textContent = currency(Number(form.amountText) || 0);
-  $('#amount-expression').textContent = form.amountExpression && form.amountExpression !== form.amountText ? form.amountExpression : '';
+  $('#amount-display').scrollLeft = $('#amount-display').scrollWidth;
+  $('#amount-expression').textContent = form.amountDisplayExpression || form.amountExpression || form.amountText || '0';
+  $('#amount-expression').scrollLeft = $('#amount-expression').scrollWidth;
+  updateOperatorCycle(form.amountExpression);
   $('#debt-settlement-summary').hidden = !debtSettlementReadOnly;
   $('#debt-settlement-summary').innerHTML = debtSettlementReadOnly ? `
     <p><span>借貸來源</span><strong>${escapeHTML(settlementSource?.note || '原借貸項目')}</strong></p>
@@ -594,7 +597,7 @@ function renderSheet() {
   $('#date-input').value = form.date;
   $('#time-input').value = form.time;
   $('#date-time-fields').hidden = reimbursementReadOnly || debtSettlementReadOnly;
-  $$('.number-pad button').forEach((button) => { button.disabled = batchReimbursementReadOnly || debtSettlementReadOnly; });
+  $$('.number-pad button[data-key]').forEach((button) => { button.disabled = batchReimbursementReadOnly || debtSettlementReadOnly; });
   $('#more-options').hidden = debtSettlementReadOnly;
   $('#save-transaction').hidden = debtSettlementReadOnly;
   $('#save-transaction').disabled = batchReimbursementReadOnly;
@@ -632,12 +635,21 @@ function renderSheet() {
 
 function appendAmount(key) {
   const currentExpression = state.form.amountExpression ?? state.form.amountText;
+  if (key === 'operator-cycle') {
+    const operators = ['+', '-', '×', '÷'];
+    const currentOperator = operators.includes(currentExpression.at(-1)) ? currentExpression.at(-1) : null;
+    key = currentOperator ? operators[(operators.indexOf(currentOperator) + 1) % operators.length] : operators[0];
+  }
   const result = updateExpression(currentExpression, key);
   state.form.amountExpression = result.expression;
+  state.form.amountDisplayExpression = key === '=' && result.value !== null && !result.error ? `${currentExpression} =` : result.expression;
   if (result.value !== null && !result.error) state.form.amountText = String(result.value);
   else if (!result.expression) state.form.amountText = '';
   $('#amount-display').textContent = currency(Number(state.form.amountText) || 0);
-  $('#amount-expression').textContent = result.expression && result.expression !== state.form.amountText ? result.expression : '';
+  $('#amount-display').scrollLeft = $('#amount-display').scrollWidth;
+  $('#amount-expression').textContent = state.form.amountDisplayExpression || '0';
+  $('#amount-expression').scrollLeft = $('#amount-expression').scrollWidth;
+  updateOperatorCycle(result.expression);
   $('#calculator-error').hidden = !result.error;
   $('#calculator-error').textContent = result.error || '';
   if (state.form.reimbursementEnabled && !state.form.reimbursementAmountTouched) {
@@ -648,6 +660,14 @@ function appendAmount(key) {
     state.form.debtAmountText = state.form.amountText;
     $('#debt-amount-input').value = state.form.debtAmountText;
   }
+}
+
+function updateOperatorCycle(expression = '') {
+  const operators = ['+', '-', '×', '÷'];
+  const currentOperator = operators.includes(expression.at(-1)) ? expression.at(-1) : '+';
+  const nextOperator = operators[(operators.indexOf(currentOperator) + 1) % operators.length];
+  $('#operator-cycle').textContent = currentOperator;
+  $('#operator-cycle').setAttribute('aria-label', `目前運算符號${currentOperator}，再次點擊切換為${nextOperator}`);
 }
 
 function validationError() {
@@ -1163,7 +1183,7 @@ function initialiseEvents() {
     if (state.form.type === 'expense' && state.form.debtDirection && !state.form.debtAmountText) state.form.debtAmountText = state.form.amountText;
     renderSheet();
   }));
-  $$('.number-pad button').forEach((button) => button.addEventListener('click', () => appendAmount(button.dataset.key)));
+  $$('.number-pad button[data-key]').forEach((button) => button.addEventListener('click', () => appendAmount(button.dataset.key)));
   $('#note-input').addEventListener('input', (event) => {
     state.form.note = event.target.value;
     if (state.form.reimbursementEnabled && !state.form.reimbursementNoteTouched) {
