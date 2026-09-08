@@ -279,12 +279,11 @@ textarea { padding: 11px; resize: vertical; }
 .quick-field strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .quick-date-field input { min-width: 0; height: auto; padding: 0; border: 0; background: transparent; color: var(--text); font-size: 12px; }
 .calculator-error { margin: -3px 0 6px; color: #ffb9b9; font-size: 12px; text-align: center; }
-.number-pad { display: grid; min-height: 0; flex: 1; grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(3, minmax(25px, 1fr)); gap: 4px; margin: 0; }
+.number-pad { display: grid; min-height: 0; flex: 1; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(4, minmax(24px, 1fr)); gap: 4px; margin: 0; }
 .number-pad button { min-width: 0; height: auto; min-height: 0; border: 1px solid #3d4345; border-radius: 8px; background: #363a3c; color: var(--text); font-size: clamp(14px, 4.8vw, 19px); font-variant-numeric: tabular-nums; }
 .number-pad .operator-key { background: #2b4039; color: #9ef0c6; font-weight: 850; }
 .number-pad .utility-key { background: #403536; color: #ffc1c1; font-size: 15px; font-weight: 800; }
-.number-pad .zero-key, .number-pad .equals-key { grid-column: span 2; }
-.number-pad .equals-key { height: auto; background: var(--accent); color: var(--accent-ink); font-weight: 900; }
+.number-pad .equals-key { grid-row: span 2; height: auto; background: var(--accent); color: var(--accent-ink); font-weight: 900; }
 .number-pad button:active { background: #51585a; }
 .confirm-dialog { position: fixed; z-index: 13; right: 22px; bottom: 30px; left: 22px; max-width: 420px; margin: auto; padding: 20px; border: 1px solid #77454a; border-radius: 18px; background: #292124; box-shadow: 0 14px 44px rgba(0, 0, 0, .48); }
 .confirm-dialog h2 { margin-bottom: 8px; }

@@ -1,7 +1,7 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=34';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=34';
-import { calculateExpression, updateExpression } from './calculator.js?v=34';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=34';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=35';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=35';
+import { calculateExpression, updateExpression } from './calculator.js?v=35';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=35';
 
 const state = {
   repository: null,
@@ -519,7 +519,13 @@ function renderSheet() {
   const batchReimbursementSource = !reimbursementReadOnly && form.isBatchReimbursement === true;
   const currentTransaction = form.id ? state.transactions.find((item) => item.id === form.id) : null;
   const settlementSource = debtSettlementReadOnly ? state.transactions.find((item) => item.id === form.debtSourceId) : null;
-  $('#transaction-type-cycle').textContent = ({ expense: '支出', income: '收入', transfer: '轉帳', debt: '借貸' })[form.type] || '支出';
+  const typeLabels = { expense: '支出', income: '收入', transfer: '轉帳', debt: '借貸' };
+  const types = ['expense', 'income', 'transfer', 'debt'];
+  const typeIndex = Math.max(types.indexOf(form.type), 0);
+  const typeLabel = typeLabels[form.type] || typeLabels.expense;
+  const nextTypeLabel = typeLabels[types[(typeIndex + 1) % types.length]];
+  $('#transaction-type-cycle').textContent = `${typeLabel} ↻`;
+  $('#transaction-type-cycle').setAttribute('aria-label', `目前${typeLabel}，點擊切換為${nextTypeLabel}`);
   $('#transaction-type-cycle').disabled = Boolean(form.id);
   $('#transaction-type-cycle').hidden = debtSettlementReadOnly;
   $('#quick-entry-panel').hidden = debtSettlementReadOnly;
@@ -625,11 +631,6 @@ function renderSheet() {
 }
 
 function appendAmount(key) {
-  if (key === 'operator-cycle') {
-    const operators = ['+', '-', '×', '÷'];
-    const currentOperator = state.form.amountExpression?.at(-1);
-    key = operators.includes(currentOperator) ? operators[(operators.indexOf(currentOperator) + 1) % operators.length] : operators[0];
-  }
   const currentExpression = state.form.amountExpression ?? state.form.amountText;
   const result = updateExpression(currentExpression, key);
   state.form.amountExpression = result.expression;
