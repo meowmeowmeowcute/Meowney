@@ -212,7 +212,6 @@ async function buildNormalTransaction(stores, input, type, existing = null) {
   if (debtDirection) {
     requireDebtDirection(debtDirection);
     if (debtAmount > base.amount) throw new DataValidationError('欠款或待收金額不可大於支出金額。');
-    if (!base.note) throw new DataValidationError('請在備註填寫欠款對象。');
     if (isPlannedClaim) throw new DataValidationError('欠款支出不可同時標記預計請款。');
   }
   const transaction = {

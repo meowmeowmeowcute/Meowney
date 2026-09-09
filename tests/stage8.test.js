@@ -101,7 +101,7 @@ export async function runStage8Tests() {
     assert(html.includes('原始支出只計入尚未報銷的部分') && requirements.includes('報銷統計口徑'), '介面說明或需求紀錄缺少部分報銷統計口徑。');
   });
   await test('高頻記帳、首次使用、驗證與返回流程已完成便利性改善', async () => {
-    const [app, html, css, requirements, uxNotes] = await Promise.all([read('app.js'), read('index.html'), read('styles.css'), read('PROJECT_REQUIREMENTS.md'), read('UX_IMPROVEMENTS.md')]);
+    const [app, dataLayer, html, css, requirements, uxNotes] = await Promise.all([read('app.js'), read('data-layer.js'), read('index.html'), read('styles.css'), read('PROJECT_REQUIREMENTS.md'), read('UX_IMPROVEMENTS.md')]);
     assert(html.indexOf('class="number-pad"') > html.indexOf('id="category-section"') && html.includes('id="quick-entry-panel"'), '數字鍵盤未整合到底部快速操作區。');
     assert(html.indexOf('id="transaction-type-cycle"') > html.indexOf('id="quick-entry-panel"') && app.includes("const types = ['expense', 'income', 'transfer', 'debt']"), '交易類型單鍵循環切換未放在底部操作區。');
     assert(html.includes('id="operator-cycle"') && html.includes('data-key="operator-cycle"') && app.includes("const operators = ['+', '-', '×', '÷']"), '四則運算沒有合併為可循環切換的單一按鍵。');
@@ -112,7 +112,7 @@ export async function runStage8Tests() {
     assert(html.includes('id="reimbursement-note-input"') && html.includes('aria-required="false"') && !/id="reimbursement-note-input"[^>]*\srequired(?:\s|=|>)/.test(html), '報銷備註仍被標示為必填。');
     assert(app.includes('function clearFormValidation()') && app.includes('if (!form) return;\n  clearFormValidation();'), '重新顯示表單時沒有清除舊的紅框驗證狀態。');
     assert(app.includes('function appendAmount(key) {\n  clearFormValidation();'), '修正金額輸入後沒有立即清除目前的紅框驗證狀態。');
-    assert(!app.includes('請在備註填寫借貸對象'), '欠款人或被欠款人仍被當成必填欄位。');
+    assert(!app.includes('請在備註填寫借貸對象') && !dataLayer.includes('請在備註填寫欠款對象') && app.includes("'被欠款人／備註（選填）'") && app.includes("'欠款人／備註（選填）'"), '欠款人或被欠款人仍被當成必填欄位。');
     assert(css.includes('@keyframes amount-editor-panel-in') && css.includes('animation: amount-editor-panel-in'), '金額輸入浮層沒有彈出動畫。');
     assert(/\.number-pad\s*\{[^}]*grid-template-columns:\s*repeat\(5, 1fr\)[^}]*grid-template-rows:\s*repeat\(4/.test(css) && html.includes('class="quick-field quick-date-field"'), '手機鍵盤與右側 2×4 功能區配置不完整。');
     assert(/\.quick-entry-panel\s*\{[^}]*grid-template-rows:\s*52px minmax\(0, 1fr\)[^}]*overflow:\s*hidden/.test(css) && css.includes('.calculation-display .amount-expression') && css.includes('overflow-x: auto'), '獨立算式與結果顯示列或長算式水平查看功能不存在。');

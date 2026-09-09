@@ -1,13 +1,13 @@
-const CACHE_NAME = 'meowney-app-shell-v42';
+const CACHE_NAME = 'meowney-app-shell-v43';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css?v=42',
-  './app.js?v=42',
-  './calculator.js?v=42',
-  './data-layer.js?v=42',
-  './query-logic.js?v=42',
-  './backup-format.js?v=42',
+  './styles.css?v=43',
+  './app.js?v=43',
+  './calculator.js?v=43',
+  './data-layer.js?v=43',
+  './query-logic.js?v=43',
+  './backup-format.js?v=43',
   './manifest.webmanifest',
   './icons/meowney-192.png',
   './icons/meowney-512.png',

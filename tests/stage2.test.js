@@ -143,6 +143,8 @@ export async function runStage2Tests() {
       assert(calculateDebtRemaining(borrowed, transactions) === 60 && calculateDebtRemaining(lent, transactions) === 100, '獨立借入或借出的部分結清計算錯誤。');
       await rejects(() => repository.updateTransaction(borrowed.id, { debtDirection: 'receivable' }), DataValidationError);
       await rejects(() => repository.updateExpenseWithReimbursement(payableExpense.id, { debtDirection: null, debtAmount: null }, { enabled: false }), DataValidationError);
+      const anonymousExpenseDebt = await repository.createTransaction({ type: 'expense', amount: 50, debtDirection: 'payable', debtAmount: 20, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '', date: '2026-08-26', time: '10:20' });
+      assert(anonymousExpenseDebt.note === '', '消費欠款的欠款人留空時不應阻止建立支出。');
       await repository.deleteTransaction(borrowed.id);
       transactions = await repository.listTransactions();
       assert(!transactions.some((item) => item.id === borrowed.id || item.debtSourceId === borrowed.id), '刪除借貸來源沒有一併刪除結清紀錄。');

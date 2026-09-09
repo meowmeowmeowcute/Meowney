@@ -1,7 +1,7 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=42';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=42';
-import { calculateExpression, updateExpression } from './calculator.js?v=42';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=42';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=43';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=43';
+import { calculateExpression, updateExpression } from './calculator.js?v=43';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=43';
 
 const state = {
   repository: null,
@@ -592,7 +592,13 @@ function renderSheet() {
   $('#reimbursement-amount-input').value = form.reimbursementAmountText;
   $('#reimbursement-note-field').hidden = !form.reimbursementEnabled || form.type !== 'expense' || reimbursementReadOnly;
   $('#reimbursement-note-input').value = form.reimbursementNote;
-  $('#note-field-label').textContent = reimbursementReadOnly ? '報銷備註（選填）' : form.debtDirection ? '對象／備註（必填）' : '備註（選填）';
+  $('#note-field-label').textContent = reimbursementReadOnly
+    ? '報銷備註（選填）'
+    : form.debtDirection === 'payable'
+      ? '被欠款人／備註（選填）'
+      : form.debtDirection === 'receivable'
+        ? '欠款人／備註（選填）'
+        : '備註（選填）';
   $('#transaction-note-field').hidden = batchReimbursementReadOnly;
   $('#note-input').value = form.note;
   $('#note-input').disabled = batchReimbursementReadOnly || debtSettlementReadOnly;
