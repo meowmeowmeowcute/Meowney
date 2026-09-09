@@ -1,7 +1,7 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=41';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=41';
-import { calculateExpression, updateExpression } from './calculator.js?v=41';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=41';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=42';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=42';
+import { calculateExpression, updateExpression } from './calculator.js?v=42';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=42';
 
 const state = {
   repository: null,
@@ -738,7 +738,6 @@ function validationError() {
   if (form.isReimbursement && form.isBatchReimbursement) return { message: '合併報銷的金額與項目清單由已包含的支出自動產生。', selector: '#batch-reimbursement-details' };
   if (!Number.isFinite(Number(form.amountText)) || Number(form.amountText) <= 0) return { message: '請輸入大於 0 的金額。', selector: '.number-pad', focusSelector: '.number-pad button' };
   if (form.type === 'expense' && form.reimbursementEnabled && (!Number.isFinite(Number(form.reimbursementAmountText)) || Number(form.reimbursementAmountText) <= 0)) return { message: '請輸入大於 0 的報銷金額。', selector: '#reimbursement-amount-field', focusSelector: '#reimbursement-amount-input' };
-  if (form.debtDirection && !form.note.trim()) return { message: '請在備註填寫借貸對象。', selector: '#transaction-note-field', focusSelector: '#note-input' };
   if (form.type === 'expense' && form.debtDirection && (!Number.isFinite(Number(form.debtAmountText)) || Number(form.debtAmountText) <= 0 || Number(form.debtAmountText) > Number(form.amountText))) return { message: '欠款金額必須大於 0，且不可超過支出金額。', selector: '#debt-amount-field', focusSelector: '#debt-amount-input' };
   if (!form.date || !form.time) return { message: '請選擇完整的日期與時間。', selector: '#date-time-fields', focusSelector: '#time-input' };
   if (form.type === 'transfer') {

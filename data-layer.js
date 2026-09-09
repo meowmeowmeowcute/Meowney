@@ -273,7 +273,6 @@ async function buildDebtTransaction(stores, input, existing = null) {
   const account = await mustGet(stores.accounts, input.accountId ?? existing?.accountId, '帳戶');
   const transaction = transactionBase(input, 'debt', existing);
   const debtDirection = requireDebtDirection(input.debtDirection ?? existing?.debtDirection);
-  if (!transaction.note) throw new DataValidationError('請在備註填寫借貸對象。');
   return {
     ...transaction,
     accountId: account.id,

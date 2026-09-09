@@ -135,6 +135,8 @@ export async function runStage2Tests() {
 
       const borrowed = await repository.createTransaction({ type: 'debt', amount: 100, debtDirection: 'payable', accountId: cash.id, note: '向同學借錢', date: '2026-08-26', time: '09:00' });
       const lent = await repository.createTransaction({ type: 'debt', amount: 120, debtDirection: 'receivable', accountId: cash.id, note: '借給同學', date: '2026-08-26', time: '09:10' });
+      const anonymousDebt = await repository.createTransaction({ type: 'debt', amount: 30, debtDirection: 'receivable', accountId: cash.id, note: '', date: '2026-08-26', time: '09:20' });
+      assert(anonymousDebt.note === '', '欠款人或被欠款人留空時不應阻止建立借貸。');
       await repository.createDebtSettlement(borrowed.id, { amount: 40, accountId: cash.id, date: '2026-08-26', time: '10:00' });
       await repository.createDebtSettlement(lent.id, { amount: 20, accountId: cash.id, date: '2026-08-26', time: '10:10' });
       transactions = await repository.listTransactions();

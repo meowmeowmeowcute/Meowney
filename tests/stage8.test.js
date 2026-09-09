@@ -112,6 +112,7 @@ export async function runStage8Tests() {
     assert(html.includes('id="reimbursement-note-input"') && html.includes('aria-required="false"') && !/id="reimbursement-note-input"[^>]*\srequired(?:\s|=|>)/.test(html), '報銷備註仍被標示為必填。');
     assert(app.includes('function clearFormValidation()') && app.includes('if (!form) return;\n  clearFormValidation();'), '重新顯示表單時沒有清除舊的紅框驗證狀態。');
     assert(app.includes('function appendAmount(key) {\n  clearFormValidation();'), '修正金額輸入後沒有立即清除目前的紅框驗證狀態。');
+    assert(!app.includes('請在備註填寫借貸對象'), '欠款人或被欠款人仍被當成必填欄位。');
     assert(css.includes('@keyframes amount-editor-panel-in') && css.includes('animation: amount-editor-panel-in'), '金額輸入浮層沒有彈出動畫。');
     assert(/\.number-pad\s*\{[^}]*grid-template-columns:\s*repeat\(5, 1fr\)[^}]*grid-template-rows:\s*repeat\(4/.test(css) && html.includes('class="quick-field quick-date-field"'), '手機鍵盤與右側 2×4 功能區配置不完整。');
     assert(/\.quick-entry-panel\s*\{[^}]*grid-template-rows:\s*52px minmax\(0, 1fr\)[^}]*overflow:\s*hidden/.test(css) && css.includes('.calculation-display .amount-expression') && css.includes('overflow-x: auto'), '獨立算式與結果顯示列或長算式水平查看功能不存在。');
