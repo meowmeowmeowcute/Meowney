@@ -109,6 +109,10 @@ export async function runStage8Tests() {
     assert(app.includes('useGrouping: false') && !html.includes('id="amount-label"'), '新增面板仍顯示金額分隔符或多餘的算式標籤。');
     assert(html.includes('id="amount-editor"') && html.includes('data-editor-key="AC"') && html.includes('data-editor-key="="') && app.includes('function calculatorKey') && app.includes('function confirmAmountEditor'), '報銷與借欠共用的隔離金額計算浮層不完整。');
     assert(app.includes("openAmountEditor('reimbursementAmountText'") && app.includes("openAmountEditor('debtAmountText'") && app.includes('state.amountEditor = { field, title, original, expression: original'), '額外金額欄位沒有使用獨立暫存狀態。');
+    assert(html.includes('id="reimbursement-note-input"') && html.includes('aria-required="false"') && !/id="reimbursement-note-input"[^>]*\srequired(?:\s|=|>)/.test(html), '報銷備註仍被標示為必填。');
+    assert(app.includes('function clearFormValidation()') && app.includes('if (!form) return;\n  clearFormValidation();'), '重新顯示表單時沒有清除舊的紅框驗證狀態。');
+    assert(app.includes('function appendAmount(key) {\n  clearFormValidation();'), '修正金額輸入後沒有立即清除目前的紅框驗證狀態。');
+    assert(css.includes('@keyframes amount-editor-panel-in') && css.includes('animation: amount-editor-panel-in'), '金額輸入浮層沒有彈出動畫。');
     assert(/\.number-pad\s*\{[^}]*grid-template-columns:\s*repeat\(5, 1fr\)[^}]*grid-template-rows:\s*repeat\(4/.test(css) && html.includes('class="quick-field quick-date-field"'), '手機鍵盤與右側 2×4 功能區配置不完整。');
     assert(/\.quick-entry-panel\s*\{[^}]*grid-template-rows:\s*52px minmax\(0, 1fr\)[^}]*overflow:\s*hidden/.test(css) && css.includes('.calculation-display .amount-expression') && css.includes('overflow-x: auto'), '獨立算式與結果顯示列或長算式水平查看功能不存在。');
     assert(!html.includes('id="quick-category-button"') && !html.includes('id="toggle-date-time"'), '介面仍保留重複分類或額外時間展開操作。');

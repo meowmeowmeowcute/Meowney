@@ -292,8 +292,10 @@ textarea { padding: 11px; resize: vertical; }
 .number-pad .operator-key { background: #2b4039; color: #9ef0c6; font-weight: 850; }
 .number-pad .utility-key { background: #403536; color: #ffc1c1; font-size: 15px; font-weight: 800; }
 .number-pad button:active { background: #51585a; }
-.amount-editor { position: fixed; z-index: 18; inset: 0; display: grid; align-items: end; padding: 12px max(8px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); background: rgba(0, 0, 0, .62); }
-.amount-editor__panel { display: grid; width: min(100%, 520px); max-height: min(72dvh, 520px); grid-template-rows: auto 72px minmax(188px, 1fr); gap: 7px; margin: 0 auto; padding: 10px; border: 1px solid #46504d; border-radius: 18px; background: #171b1c; box-shadow: 0 18px 54px rgba(0, 0, 0, .55); }
+.amount-editor { position: fixed; z-index: 18; inset: 0; display: grid; align-items: end; padding: 12px max(8px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); background: rgba(0, 0, 0, .62); animation: amount-editor-backdrop-in .18s ease-out; }
+.amount-editor__panel { display: grid; width: min(100%, 520px); max-height: min(72dvh, 520px); grid-template-rows: auto 72px minmax(188px, 1fr); gap: 7px; margin: 0 auto; padding: 10px; border: 1px solid #46504d; border-radius: 18px; background: #171b1c; box-shadow: 0 18px 54px rgba(0, 0, 0, .55); animation: amount-editor-panel-in .24s cubic-bezier(.2, .8, .2, 1); transform-origin: bottom center; }
+@keyframes amount-editor-backdrop-in { from { background: rgba(0, 0, 0, 0); } }
+@keyframes amount-editor-panel-in { from { opacity: 0; transform: translateY(48px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 .amount-editor__header { display: flex; min-height: 38px; align-items: center; justify-content: space-between; }
 .amount-editor__header h2 { margin: 0; font-size: 18px; }
 .amount-editor__header button { display: grid; width: 38px; height: 38px; place-items: center; padding: 0; border: 1px solid #50625d; border-radius: 50%; background: #28312f; color: var(--text); font-size: 26px; line-height: 1; }
@@ -349,4 +351,8 @@ textarea { padding: 11px; resize: vertical; }
   .sheet-header { padding-top: 7px; padding-bottom: 6px; }
   .sheet-header .eyebrow { display: none; }
   .sheet-body { min-height: 80px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .amount-editor, .amount-editor__panel { animation: none; }
 }

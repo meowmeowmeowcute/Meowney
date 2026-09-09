@@ -1,7 +1,7 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=39';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=39';
-import { calculateExpression, updateExpression } from './calculator.js?v=39';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=39';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=41';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=41';
+import { calculateExpression, updateExpression } from './calculator.js?v=41';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=41';
 
 const state = {
   repository: null,
@@ -516,6 +516,7 @@ function endSheetDrag(event) {
 function renderSheet() {
   const form = state.form;
   if (!form) return;
+  clearFormValidation();
   const reimbursementReadOnly = form.isReimbursement === true;
   const debtSettlementReadOnly = form.isDebtSettlement === true;
   const batchReimbursementReadOnly = reimbursementReadOnly && form.isBatchReimbursement === true;
@@ -635,6 +636,7 @@ function renderSheet() {
 }
 
 function appendAmount(key) {
+  clearFormValidation();
   const currentExpression = state.form.amountExpression ?? state.form.amountText;
   const applied = calculatorKey(currentExpression, key);
   key = applied.key;
@@ -801,15 +803,20 @@ async function saveTransaction() {
 }
 
 function showFormError(message, target = null) {
+  clearFormValidation();
   $('#form-error').textContent = message;
   $('#form-error').hidden = false;
-  $$('.validation-target--invalid').forEach((element) => element.classList.remove('validation-target--invalid'));
   if (!target?.selector) return;
   const element = $(target.selector);
   element?.classList.add('validation-target--invalid');
   element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   const focusTarget = target.focusSelector ? $(target.focusSelector) : null;
   if (focusTarget instanceof HTMLElement) setTimeout(() => focusTarget.focus(), 220);
+}
+
+function clearFormValidation() {
+  $$('.validation-target--invalid').forEach((element) => element.classList.remove('validation-target--invalid'));
+  $('#form-error').hidden = true;
 }
 
 function showDeleteConfirm({ updateHistory = true } = {}) {
@@ -1250,6 +1257,7 @@ function initialiseEvents() {
   }));
   $$('.number-pad button[data-key]').forEach((button) => button.addEventListener('click', () => appendAmount(button.dataset.key)));
   $('#note-input').addEventListener('input', (event) => {
+    clearFormValidation();
     state.form.note = event.target.value;
     if (state.form.reimbursementEnabled && !state.form.reimbursementNoteTouched) {
       state.form.reimbursementNote = state.form.note;
@@ -1274,9 +1282,9 @@ function initialiseEvents() {
   $('#close-amount-editor').addEventListener('click', closeAmountEditor);
   $('#confirm-amount-editor').addEventListener('click', confirmAmountEditor);
   $$('[data-editor-key]').forEach((button) => button.addEventListener('click', () => appendEditorAmount(button.dataset.editorKey)));
-  $('#reimbursement-note-input').addEventListener('input', (event) => { state.form.reimbursementNote = event.target.value; state.form.reimbursementNoteTouched = true; });
-  $('#date-input').addEventListener('input', (event) => { state.form.date = event.target.value; });
-  $('#time-input').addEventListener('input', (event) => { state.form.time = event.target.value; });
+  $('#reimbursement-note-input').addEventListener('input', (event) => { clearFormValidation(); state.form.reimbursementNote = event.target.value; state.form.reimbursementNoteTouched = true; });
+  $('#date-input').addEventListener('input', (event) => { clearFormValidation(); state.form.date = event.target.value; });
+  $('#time-input').addEventListener('input', (event) => { clearFormValidation(); state.form.time = event.target.value; });
   $('#save-transaction').addEventListener('click', saveTransaction);
   $('#save-debt-settlement').addEventListener('click', saveDebtSettlement);
   $('#fill-debt-remaining').addEventListener('click', () => {
