@@ -615,10 +615,10 @@ function renderSheet() {
     : parent
       ? parent.children.map((category) => `<button type="button" class="category-tile ${category.id === form.categoryId ? 'category-tile--active' : ''}" data-category-id="${category.id}" aria-pressed="${category.id === form.categoryId}"><span>${escapeHTML(category.name)}</span></button>`).join('')
     : '<span class="category-empty">請先選擇母類別</span>';
-  const accountChips = (attribute, selectedId, blockedId = null) => state.accounts.map((account) => `<button type="button" class="chip ${account.id === selectedId ? 'chip--active' : ''}" ${attribute}="${account.id}" ${account.id === blockedId ? 'disabled' : ''}>${escapeHTML(account.name)}</button>`).join('');
+  const accountChips = (attribute, selectedId) => state.accounts.map((account) => `<button type="button" class="chip ${account.id === selectedId ? 'chip--active' : ''}" ${attribute}="${account.id}">${escapeHTML(account.name)}</button>`).join('');
   $('#account-options').innerHTML = accountChips('data-account-id', form.accountId);
-  $('#source-account-options').innerHTML = accountChips('data-source-account-id', form.sourceAccountId, form.targetAccountId);
-  $('#target-account-options').innerHTML = accountChips('data-target-account-id', form.targetAccountId, form.sourceAccountId);
+  $('#source-account-options').innerHTML = accountChips('data-source-account-id', form.sourceAccountId);
+  $('#target-account-options').innerHTML = accountChips('data-target-account-id', form.targetAccountId);
   const source = form.debtDirection && !debtSettlementReadOnly ? state.transactions.find((item) => item.id === form.id) : null;
   const settlements = source ? state.transactions.filter((item) => item.type === 'debt-settlement' && item.debtSourceId === source.id).sort(byDateTime) : [];
   const remaining = source ? calculateDebtRemaining(source, state.transactions) : 0;
@@ -633,10 +633,16 @@ function renderSheet() {
   $$('[data-parent-id]').forEach((button) => button.addEventListener('click', () => { form.parentId = button.dataset.parentId; form.categoryId = null; renderSheet(); }));
   $$('[data-category-id]').forEach((button) => button.addEventListener('click', () => { form.categoryId = button.dataset.categoryId; renderSheet(); }));
   $$('[data-account-id]').forEach((button) => button.addEventListener('click', () => { form.accountId = button.dataset.accountId; renderSheet(); }));
-  $$('[data-source-account-id]').forEach((button) => button.addEventListener('click', () => { form.sourceAccountId = button.dataset.sourceAccountId; renderSheet(); }));
-  $$('[data-target-account-id]').forEach((button) => button.addEventListener('click', () => { form.targetAccountId = button.dataset.targetAccountId; renderSheet(); }));
+  $$('[data-source-account-id]').forEach((button) => button.addEventListener('click', () => { form.sourceAccountId = button.dataset.sourceAccountId; renderSheet(); notifyIfSameTransferAccount(); }));
+  $$('[data-target-account-id]').forEach((button) => button.addEventListener('click', () => { form.targetAccountId = button.dataset.targetAccountId; renderSheet(); notifyIfSameTransferAccount(); }));
   $$('[data-settlement-account-id]').forEach((button) => button.addEventListener('click', () => { form.settlementAccountId = button.dataset.settlementAccountId; renderSheet(); }));
   $$('[data-edit-settlement]').forEach((button) => button.addEventListener('click', () => openSheet(button.dataset.editSettlement)));
+}
+
+function notifyIfSameTransferAccount() {
+  const form = state.form;
+  if (form.sourceAccountId && form.sourceAccountId === form.targetAccountId) showFormError('轉帳的來源與目的帳戶不可相同，請重新選擇其中一邊。', { selector: '#transfer-account-section' });
+  else clearFormValidation();
 }
 
 function appendAmount(key) {
