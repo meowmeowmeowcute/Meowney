@@ -372,9 +372,8 @@ function applyTypeDefaults(form, type) {
     form.accountId = null;
     form.parentId = null;
     form.categoryId = null;
-    form.sourceAccountId = validAccountId(saved.sourceAccountId);
-    form.targetAccountId = validAccountId(saved.targetAccountId);
-    if (form.sourceAccountId === form.targetAccountId) form.targetAccountId = null;
+    form.sourceAccountId = null;
+    form.targetAccountId = null;
   } else {
     form.accountId = preferredAccountId;
     form.sourceAccountId = null;
@@ -394,10 +393,9 @@ function createBlankForm() {
 }
 
 async function rememberTransactionDefaults(form) {
+  if (form.type === 'transfer') return;
   const defaults = { ...state.transactionDefaults };
-  defaults[form.type] = form.type === 'transfer'
-    ? { sourceAccountId: form.sourceAccountId, targetAccountId: form.targetAccountId }
-    : { accountId: form.accountId, ...(form.type === 'expense' ? { parentId: form.parentId, categoryId: form.categoryId } : {}) };
+  defaults[form.type] = { accountId: form.accountId, ...(form.type === 'expense' ? { parentId: form.parentId, categoryId: form.categoryId } : {}) };
   state.transactionDefaults = defaults;
   await state.repository.setSetting('transaction-defaults', defaults);
 }
