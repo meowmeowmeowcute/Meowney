@@ -1,7 +1,7 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=44';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=44';
-import { calculateExpression, updateExpression } from './calculator.js?v=44';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=44';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=45';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=45';
+import { calculateExpression, updateExpression } from './calculator.js?v=45';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=45';
 
 const state = {
   repository: null,
@@ -1247,7 +1247,12 @@ function initialiseEvents() {
   $('#transaction-type-cycle').addEventListener('click', () => {
     if (!state.form?.id) {
       const types = ['expense', 'income', 'transfer', 'debt'];
-      applyTypeDefaults(state.form, types[(types.indexOf(state.form.type) + 1) % types.length]);
+      let nextType = types[(types.indexOf(state.form.type) + 1) % types.length];
+      if (nextType === 'transfer' && state.accounts.length < 2) {
+        showToast('帳戶少於兩個，無法使用轉帳。');
+        nextType = types[(types.indexOf(nextType) + 1) % types.length];
+      }
+      applyTypeDefaults(state.form, nextType);
       $('#form-error').hidden = true;
       renderSheet();
     }
