@@ -236,6 +236,8 @@ textarea { padding: 11px; resize: vertical; }
 .claim-ratio-custom-field input { font-variant-numeric: tabular-nums; text-align: right; }
 .claim-ratio-preview { margin: 11px 0 0; color: #d3e8b9; font-size: 12px; line-height: 1.5; }
 .claim-ratio-note { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; }
+.claim-ratio-preset-body { padding-top: 4px; }
+.claim-ratio-preset-hint { padding-top: 0; padding-bottom: 10px; }
 .transaction-claim-note { color: #e8bd6a; }
 .reimbursement-section { padding: 13px; border: 1px solid #334840; border-radius: 15px; background: linear-gradient(135deg, rgba(29, 61, 49, .56), rgba(29, 35, 36, .72)); }
 .reimbursement-section .field-label { margin-bottom: 8px; }

@@ -1,9 +1,9 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=46';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=46';
-import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=46';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=46';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=47';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=47';
+import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=47';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=47';
 
-const CLAIM_RATIO_PRESETS = [0, 10, 25, 50, 75, 100];
+const DEFAULT_CLAIM_RATIO_PRESETS = [66, 100];
 
 const state = {
   repository: null,
@@ -20,6 +20,7 @@ const state = {
   claimSelectionStatus: null,
   claimCandidates: [],
   transactionDefaults: {},
+  claimRatioPresets: [...DEFAULT_CLAIM_RATIO_PRESETS],
   amountEditor: null,
 };
 let sheetDrag = null;
@@ -368,6 +369,7 @@ function renderSettings() {
     ? subcategories.map((subcategory) => `<div class="manager-row"><span class="manager-row__text"><b>${escapeHTML(subcategory.name)}</b><small>${escapeHTML(parentName(subcategory.parentId))}</small></span><button class="manager-action" type="button" data-edit-subcategory="${subcategory.id}">編輯</button><button class="manager-action manager-action--danger" type="button" data-delete-subcategory="${subcategory.id}">刪除</button></div>`).join('')
     : '<p class="manager-empty">尚無子類別。</p>';
   $('#subcategory-parent-input').innerHTML = state.categories.map((parent) => `<option value="${parent.id}">${escapeHTML(parent.name)}</option>`).join('');
+  renderClaimRatioPresetManager();
   bindManagerActions();
 }
 
@@ -670,6 +672,42 @@ function claimRatioPreviewText(amount, ratio) {
   return `合併請款時約可請款 ${currency(calculateClaimAmount(amount, ratio))}（已無條件捨去到十位）。`;
 }
 
+function normaliseClaimRatioPresets(list) {
+  return [...new Set(list.map((value) => Number(value)).filter((value) => Number.isFinite(value) && value >= 0 && value <= 100))];
+}
+
+function sortedClaimRatioPresets() {
+  return [...state.claimRatioPresets].sort((left, right) => left - right);
+}
+
+async function addClaimRatioPreset(rawValue) {
+  const ratio = Number(rawValue);
+  if (!Number.isFinite(ratio) || ratio < 0 || ratio > 100) return showToast('請輸入 0 至 100 的數字。');
+  if (state.claimRatioPresets.includes(ratio)) return showToast('這個比例已經在選項中。');
+  state.claimRatioPresets = sortedClaimRatioPresets().concat(ratio).sort((left, right) => left - right);
+  await state.repository.setSetting('claim-ratio-presets', state.claimRatioPresets);
+  renderClaimRatioPresetManager();
+  renderClaimRatioSection();
+  showToast('已新增請款比例選項。');
+}
+
+async function removeClaimRatioPreset(value) {
+  state.claimRatioPresets = state.claimRatioPresets.filter((item) => item !== value);
+  await state.repository.setSetting('claim-ratio-presets', state.claimRatioPresets);
+  renderClaimRatioPresetManager();
+  renderClaimRatioSection();
+}
+
+function renderClaimRatioPresetManager() {
+  const list = $('#claim-ratio-preset-list');
+  if (!list) return;
+  const presets = sortedClaimRatioPresets();
+  list.innerHTML = presets.length
+    ? presets.map((value) => `<div class="manager-row"><span class="manager-row__text"><b>${value}%</b></span><button class="manager-action manager-action--danger" type="button" data-delete-claim-ratio-preset="${value}">刪除</button></div>`).join('')
+    : '<p class="manager-empty">尚無快速選項，可在下方新增。</p>';
+  $$('[data-delete-claim-ratio-preset]').forEach((button) => button.addEventListener('click', () => removeClaimRatioPreset(Number(button.dataset.deleteClaimRatioPreset))));
+}
+
 function renderClaimRatioSection() {
   const form = state.form;
   if (!form) return;
@@ -679,9 +717,10 @@ function renderClaimRatioSection() {
   $('#claim-ratio-section').hidden = !visible;
   if (!visible) return;
   const ratio = Math.min(100, Math.max(0, Number.isFinite(Number(form.claimRatio)) ? Number(form.claimRatio) : 100));
-  const matchesPreset = CLAIM_RATIO_PRESETS.includes(ratio);
+  const presets = sortedClaimRatioPresets();
+  const matchesPreset = presets.includes(ratio);
   $('#claim-ratio-options').innerHTML = [
-    ...CLAIM_RATIO_PRESETS.map((value) => `<button type="button" class="chip ${ratio === value ? 'chip--active' : ''}" data-claim-ratio="${value}" aria-pressed="${ratio === value}">${value}%</button>`),
+    ...presets.map((value) => `<button type="button" class="chip ${ratio === value ? 'chip--active' : ''}" data-claim-ratio="${value}" aria-pressed="${ratio === value}">${value}%</button>`),
     `<button type="button" class="chip ${!matchesPreset ? 'chip--active' : ''}" data-claim-ratio-custom aria-pressed="${!matchesPreset}">其他</button>`,
   ].join('');
   $$('#claim-ratio-options [data-claim-ratio]').forEach((button) => button.addEventListener('click', () => {
@@ -1363,7 +1402,7 @@ function initialiseEvents() {
       button.classList.toggle('chip--active', active);
       button.setAttribute('aria-pressed', String(active));
     });
-    $('#claim-ratio-options [data-claim-ratio-custom]')?.classList.toggle('chip--active', !CLAIM_RATIO_PRESETS.includes(ratio));
+    $('#claim-ratio-options [data-claim-ratio-custom]')?.classList.toggle('chip--active', !state.claimRatioPresets.includes(ratio));
     $('#claim-ratio-preview').textContent = claimRatioPreviewText(Number(state.form.amountText || 0), ratio);
   });
   $('#reimbursement-amount-input').addEventListener('click', () => openAmountEditor('reimbursementAmountText', '報銷金額'));
@@ -1408,6 +1447,19 @@ function initialiseEvents() {
     if (file) await previewCsvImport(file);
   });
   $('#apply-csv-import').addEventListener('click', applyCsvImport);
+  $('#toggle-claim-ratio-presets').addEventListener('click', () => {
+    const body = $('#claim-ratio-preset-body');
+    const expanded = !body.hidden;
+    body.hidden = expanded;
+    $('#toggle-claim-ratio-presets').setAttribute('aria-expanded', String(!expanded));
+    $('#toggle-claim-ratio-presets').textContent = expanded ? '展開' : '收合';
+  });
+  $('#claim-ratio-preset-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const input = $('#claim-ratio-preset-input');
+    await addClaimRatioPreset(input.value);
+    input.value = '';
+  });
   $('#new-account').addEventListener('click', () => showAccountForm());
   $('#new-parent-category').addEventListener('click', () => showParentCategoryForm());
   $('#new-subcategory').addEventListener('click', () => {
@@ -1468,6 +1520,8 @@ async function initialiseApp() {
     await loadData();
     const savedDefaults = await state.repository.getSetting('transaction-defaults');
     state.transactionDefaults = savedDefaults && typeof savedDefaults === 'object' ? savedDefaults : {};
+    const savedClaimRatioPresets = await state.repository.getSetting('claim-ratio-presets');
+    state.claimRatioPresets = normaliseClaimRatioPresets(Array.isArray(savedClaimRatioPresets) ? savedClaimRatioPresets : DEFAULT_CLAIM_RATIO_PRESETS);
     render();
   } catch (error) {
     $('#transaction-list').innerHTML = `<div class="empty-state">無法開啟本機資料：${escapeHTML(error.message || '請重新整理後再試。')}</div>`;

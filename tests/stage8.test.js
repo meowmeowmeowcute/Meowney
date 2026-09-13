@@ -100,6 +100,15 @@ export async function runStage8Tests() {
     assert(app.includes('已請款 -${currency(claimed)}') && app.includes('function transactionClaimNoteMarkup'), '部分報銷的查詢明細沒有說明原始金額與已請款金額。');
     assert(html.includes('原始支出只計入尚未報銷的部分') && requirements.includes('報銷統計口徑'), '介面說明或需求紀錄缺少部分報銷統計口徑。');
   });
+  await test('請款比例快速選項預設只有 66% 與 100%，可在設定中新增／刪除並持久化，且清單預設收合', async () => {
+    const [app, html] = await Promise.all([read('app.js'), read('index.html')]);
+    assert(app.includes('const DEFAULT_CLAIM_RATIO_PRESETS = [66, 100]'), '請款比例預設選項不是只有 66% 與 100%。');
+    assert(app.includes('state.claimRatioPresets') && !app.includes('CLAIM_RATIO_PRESETS.includes') && !app.includes('CLAIM_RATIO_PRESETS.map'), '請款比例選單沒有改用可設定的清單。');
+    assert(app.includes("async function addClaimRatioPreset") && app.includes("async function removeClaimRatioPreset") && app.includes("state.repository.setSetting('claim-ratio-presets'"), '新增或刪除請款比例選項沒有持久化到設定。');
+    assert(html.includes('id="claim-ratio-preset-body"') && /id="claim-ratio-preset-body"[^>]*\bhidden\b/.test(html), '請款比例選項清單預設應為收合狀態。');
+    assert(html.includes('id="toggle-claim-ratio-presets"') && html.includes('>展開<') && app.includes("body.hidden = expanded"), '請款比例選項清單缺少展開／收合切換。');
+    assert(html.includes('id="claim-ratio-preset-input"') && html.includes('id="claim-ratio-preset-form"'), '設定頁缺少新增請款比例選項的輸入介面。');
+  });
   await test('高頻記帳、首次使用、驗證與返回流程已完成便利性改善', async () => {
     const [app, dataLayer, html, css, requirements, uxNotes] = await Promise.all([read('app.js'), read('data-layer.js'), read('index.html'), read('styles.css'), read('PROJECT_REQUIREMENTS.md'), read('UX_IMPROVEMENTS.md')]);
     assert(html.indexOf('class="number-pad"') > html.indexOf('id="category-section"') && html.includes('id="quick-entry-panel"'), '數字鍵盤未整合到底部快速操作區。');

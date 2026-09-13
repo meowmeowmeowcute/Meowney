@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/meowney-512.png" type="image/png" />
     <link rel="apple-touch-icon" href="icons/meowney-192.png" />
-    <link rel="stylesheet" href="styles.css?v=46" />
+    <link rel="stylesheet" href="styles.css?v=47" />
   </head>
   <body>
     <div class="app-shell">
@@ -179,6 +179,20 @@
               <div><button class="button button--secondary" type="button" data-cancel-form="subcategory">取消</button><button class="button button--primary" type="submit">儲存子類別</button></div>
             </form>
             <div id="subcategory-manager-list" class="manager-list"></div>
+          </section>
+          <section class="settings-group" aria-labelledby="claim-ratio-preset-title">
+            <div class="settings-group-heading">
+              <h2 id="claim-ratio-preset-title">請款比例選項</h2>
+              <button id="toggle-claim-ratio-presets" class="text-action" type="button" aria-expanded="false" aria-controls="claim-ratio-preset-body">展開</button>
+            </div>
+            <div id="claim-ratio-preset-body" class="claim-ratio-preset-body" hidden>
+              <p class="manager-empty claim-ratio-preset-hint">管理支出面板中「請款比例」的快速選項；比例仍可隨時自訂輸入，不受此清單限制。</p>
+              <div id="claim-ratio-preset-list" class="manager-list"></div>
+              <form id="claim-ratio-preset-form" class="management-form">
+                <label>新增比例（0-100）<input id="claim-ratio-preset-input" type="number" min="0" max="100" step="1" inputmode="numeric" required placeholder="例如 66" /></label>
+                <div><button class="button button--primary" type="submit">新增選項</button></div>
+              </form>
+            </div>
           </section>
           <section class="settings-group" aria-labelledby="settings-file-title">
             <h2 id="settings-file-title">資料管理</h2>
@@ -366,6 +380,6 @@
     </section>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script type="module" src="app.js?v=46"></script>
+    <script type="module" src="app.js?v=47"></script>
   </body>
 </html>
