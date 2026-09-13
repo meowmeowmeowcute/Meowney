@@ -1,11 +1,13 @@
-import { DIRECT_EXPENSE_PARENT_CATEGORY_NAME } from './data-layer.js?v=29';
+import { DIRECT_EXPENSE_PARENT_CATEGORY_NAME } from './data-layer.js?v=46';
+import { calculateClaimAmount } from './calculator.js?v=46';
 
 export const BACKUP_FORMAT = 'meowney-backup';
 export const BACKUP_VERSION = 1;
 const PRE_DEBT_CSV_COLUMNS = [
   '交易識別', '類型', '金額', '帳戶ID', '帳戶', '來源帳戶ID', '來源帳戶', '目的帳戶ID', '目的帳戶', '母類別ID', '母類別', '子類別ID', '子類別', '日期', '時間', '備註', '報銷支出交易ID', '預計請款', '請款單ID', '請款備註', '合併報銷',
 ];
-export const CSV_COLUMNS = [...PRE_DEBT_CSV_COLUMNS, '借貸方向', '借貸金額', '借貸來源交易ID'];
+const PRE_RATIO_CSV_COLUMNS = [...PRE_DEBT_CSV_COLUMNS, '借貸方向', '借貸金額', '借貸來源交易ID'];
+export const CSV_COLUMNS = [...PRE_RATIO_CSV_COLUMNS, '請款比例'];
 const CLAIM_CSV_COLUMNS = PRE_DEBT_CSV_COLUMNS.slice(0, -1);
 const PLANNED_CSV_COLUMNS = CLAIM_CSV_COLUMNS.slice(0, -2);
 const PREVIOUS_CSV_COLUMNS = PLANNED_CSV_COLUMNS.slice(0, -1);
@@ -27,6 +29,11 @@ function reimbursementSourceIds(transaction) {
     ? transaction.reimbursementExpenseIds
     : transaction?.reimbursementExpenseId ? [transaction.reimbursementExpenseId] : [];
   return [...new Set(ids.filter((id) => text(id)))];
+}
+
+// 每個原支出依其「請款比例」個別計算可請款金額，回傳合計；用於驗證合併報銷金額是否正確。
+function batchReimbursementTotal(expenses) {
+  return expenses.reduce((sum, expense) => sum + calculateClaimAmount(expense.amount, expense.claimRatio ?? 100), 0);
 }
 function requireUnique(records, label) {
   const ids = new Set();
@@ -84,6 +91,8 @@ function validateBackupData(data) {
     if (hasOwn(transaction, 'isPlannedClaim') && typeof transaction.isPlannedClaim !== 'boolean') fail('交易預計請款設定格式錯誤。');
     if (hasOwn(transaction, 'claimBatchId') && transaction.claimBatchId !== null && !text(transaction.claimBatchId)) fail('交易請款單關聯格式錯誤。');
     if (hasOwn(transaction, 'claimNote') && transaction.claimNote !== null && typeof transaction.claimNote !== 'string') fail('交易請款備註格式錯誤。');
+    if (hasOwn(transaction, 'claimRatio') && transaction.claimRatio !== null && (!Number.isFinite(transaction.claimRatio) || transaction.claimRatio < 0 || transaction.claimRatio > 100)) fail('交易請款比例格式錯誤。');
+    if (transaction.type !== 'expense' && transaction.claimRatio !== null && transaction.claimRatio !== undefined) fail('只有支出可設定請款比例。');
     if (hasOwn(transaction, 'reimbursementExpenseId') && transaction.reimbursementExpenseId !== null && !text(transaction.reimbursementExpenseId)) fail('交易報銷原支出關聯格式錯誤。');
     if (hasOwn(transaction, 'reimbursementExpenseIds') && transaction.reimbursementExpenseIds !== null && (!Array.isArray(transaction.reimbursementExpenseIds) || transaction.reimbursementExpenseIds.some((id) => !text(id)) || (Array.isArray(transaction.reimbursementExpenseIds) && new Set(transaction.reimbursementExpenseIds).size !== transaction.reimbursementExpenseIds.length))) fail('交易合併報銷原支出關聯格式錯誤。');
     if (hasOwn(transaction, 'isBatchReimbursement') && typeof transaction.isBatchReimbursement !== 'boolean') fail('交易合併報銷設定格式錯誤。');
@@ -149,7 +158,13 @@ function validateBackupData(data) {
       const expenses = sourceIds.map((sourceId) => transactionsById.get(sourceId));
       if (expenses.some((expense) => !expense || expense.type !== 'expense' || expense.isPlannedClaim === true || expense.claimBatchId || expense.claimNote || expense.reimbursementTransactionId !== transaction.id) || transaction.parentCategoryId || transaction.subcategoryId) fail('報銷交易與原支出關聯錯誤。');
       if (isBatch) {
-        if (expenses.some((expense) => expense.accountId !== transaction.accountId) || transaction.amount !== expenses.reduce((sum, expense) => sum + expense.amount, 0)) fail('合併報銷關聯或金額錯誤。');
+        if (expenses.some((expense) => expense.accountId !== transaction.accountId) || transaction.amount !== batchReimbursementTotal(expenses)) fail('合併報銷關聯或金額錯誤。');
+        const breakdown = transaction.reimbursementAmountsByExpenseId;
+        if (!isObject(breakdown) || Object.keys(breakdown).length !== sourceIds.length) fail('合併報銷各項目請款金額明細錯誤。');
+        for (const expense of expenses) {
+          const claimed = breakdown[expense.id];
+          if (!Number.isFinite(claimed) || claimed < 0 || claimed !== calculateClaimAmount(expense.amount, expense.claimRatio ?? 100)) fail('合併報銷各項目請款金額明細錯誤。');
+        }
       } else {
         const [expense] = expenses;
         if (expenses.length !== 1 || transaction.accountId !== expense.accountId || transaction.date !== expense.date || transaction.time !== expense.time) fail('報銷交易與原支出關聯錯誤。');
@@ -225,9 +240,10 @@ export function exportTransactionsCsv(transactions) {
     const reimbursementIds = transaction.isReimbursement === true ? reimbursementSourceIds(transaction).join('|') : '';
     const batchReimbursement = transaction.isBatchReimbursement === true ? '是' : '';
     const debtColumns = [transaction.debtDirection || '', transaction.debtAmount || '', transaction.debtSourceId || ''];
-    if (transaction.type === 'transfer') return [transaction.id, transaction.type, transaction.amount, '', '', transaction.sourceAccountId, transaction.sourceAccountNameSnapshot, transaction.targetAccountId, transaction.targetAccountNameSnapshot, '', '', '', '', transaction.date, transaction.time, transaction.note, '', plannedClaim, claimBatchId, claimNote, batchReimbursement, ...debtColumns];
-    if (['income', 'debt', 'debt-settlement'].includes(transaction.type) && !transaction.parentCategoryId && !transaction.subcategoryId) return [transaction.id, transaction.type, transaction.amount, transaction.accountId, transaction.accountNameSnapshot, '', '', '', '', '', '', '', '', transaction.date, transaction.time, transaction.note, reimbursementIds, plannedClaim, claimBatchId, claimNote, batchReimbursement, ...debtColumns];
-    return [transaction.id, transaction.type, transaction.amount, transaction.accountId, transaction.accountNameSnapshot, '', '', '', '', transaction.parentCategoryId, transaction.parentCategoryNameSnapshot, transaction.subcategoryId, transaction.subcategoryNameSnapshot, transaction.date, transaction.time, transaction.note, '', plannedClaim, claimBatchId, claimNote, batchReimbursement, ...debtColumns];
+    const claimRatio = transaction.type === 'expense' ? transaction.claimRatio ?? 100 : '';
+    if (transaction.type === 'transfer') return [transaction.id, transaction.type, transaction.amount, '', '', transaction.sourceAccountId, transaction.sourceAccountNameSnapshot, transaction.targetAccountId, transaction.targetAccountNameSnapshot, '', '', '', '', transaction.date, transaction.time, transaction.note, '', plannedClaim, claimBatchId, claimNote, batchReimbursement, ...debtColumns, claimRatio];
+    if (['income', 'debt', 'debt-settlement'].includes(transaction.type) && !transaction.parentCategoryId && !transaction.subcategoryId) return [transaction.id, transaction.type, transaction.amount, transaction.accountId, transaction.accountNameSnapshot, '', '', '', '', '', '', '', '', transaction.date, transaction.time, transaction.note, reimbursementIds, plannedClaim, claimBatchId, claimNote, batchReimbursement, ...debtColumns, claimRatio];
+    return [transaction.id, transaction.type, transaction.amount, transaction.accountId, transaction.accountNameSnapshot, '', '', '', '', transaction.parentCategoryId, transaction.parentCategoryNameSnapshot, transaction.subcategoryId, transaction.subcategoryNameSnapshot, transaction.date, transaction.time, transaction.note, '', plannedClaim, claimBatchId, claimNote, batchReimbursement, ...debtColumns, claimRatio];
   });
   return `\uFEFF${[CSV_COLUMNS, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n')}\r\n`;
 }
@@ -276,6 +292,8 @@ function parseCsvRecords(fileText) {
   const parsed = parseCsv(fileText);
   const columns = parsed.headers.length === CSV_COLUMNS.length && parsed.headers.every((header, index) => header === CSV_COLUMNS[index])
     ? CSV_COLUMNS
+    : parsed.headers.length === PRE_RATIO_CSV_COLUMNS.length && parsed.headers.every((header, index) => header === PRE_RATIO_CSV_COLUMNS[index])
+      ? PRE_RATIO_CSV_COLUMNS
     : parsed.headers.length === PRE_DEBT_CSV_COLUMNS.length && parsed.headers.every((header, index) => header === PRE_DEBT_CSV_COLUMNS[index])
       ? PRE_DEBT_CSV_COLUMNS
     : parsed.headers.length === CLAIM_CSV_COLUMNS.length && parsed.headers.every((header, index) => header === CLAIM_CSV_COLUMNS[index])
@@ -320,13 +338,19 @@ function parseCsvRecords(fileText) {
       debtDirection: csvText(raw.借貸方向) || null,
       debtAmount: csvText(raw.借貸金額) ? Number(raw.借貸金額) : null,
       debtSourceId: csvText(raw.借貸來源交易ID) || null,
+      claimRatio: null,
     };
+    const claimRatioText = csvText(raw.請款比例 ?? '');
+    record.claimRatio = record.type === 'expense' ? (claimRatioText ? Number(claimRatioText) : 100) : null;
     record.reimbursementExpenseId = !record.isBatchReimbursement && record.reimbursementExpenseIds.length === 1 ? record.reimbursementExpenseIds[0] : null;
     const plannedClaimValue = csvText(raw.預計請款);
     const batchReimbursementValue = csvText(raw.合併報銷);
     record.reimbursementBatchNote = record.isBatchReimbursement ? record.note.split('\n報銷項目：')[0].trim() : null;
     if (!record.id || !['expense', 'income', 'transfer', 'debt', 'debt-settlement'].includes(record.type) || !Number.isFinite(record.amount) || record.amount <= 0 || !dateValue(record.date) || !timeValue(record.time) || (plannedClaimValue && plannedClaimValue !== '是') || (batchReimbursementValue && batchReimbursementValue !== '是') || (record.isBatchReimbursement && (record.type !== 'income' || !record.reimbursementExpenseIds.length)) || (record.isPlannedClaim && record.type !== 'expense') || ((record.claimBatchId || record.claimNote) && (!record.isPlannedClaim || record.type !== 'expense')) || (!record.claimBatchId && record.claimNote) || new Set(record.reimbursementExpenseIds).size !== record.reimbursementExpenseIds.length) {
       fail(`CSV 第 ${line} 列的交易識別、類型、金額、日期或時間錯誤。`);
+    }
+    if (record.type === 'expense' ? (!Number.isFinite(record.claimRatio) || record.claimRatio < 0 || record.claimRatio > 100) : (claimRatioText !== '')) {
+      fail(`CSV 第 ${line} 列的請款比例錯誤。`);
     }
     if (record.type === 'transfer') {
       if (!record.sourceAccountName || !record.targetAccountName || record.sourceAccountName === record.targetAccountName || record.reimbursementExpenseIds.length || !emptyCsvReferences(record, ['accountId', 'accountName', 'parentCategoryId', 'parentCategoryName', 'subcategoryId', 'subcategoryName'])) {
@@ -367,7 +391,7 @@ function parseCsvRecords(fileText) {
       fail(`CSV 第 ${record.line} 列的報銷原支出關聯錯誤。`);
     }
     if (record.isBatchReimbursement) {
-      if (record.amount !== expenses.reduce((sum, expense) => sum + expense.amount, 0)) fail(`CSV 第 ${record.line} 列的合併報銷金額錯誤。`);
+      if (record.amount !== batchReimbursementTotal(expenses)) fail(`CSV 第 ${record.line} 列的合併報銷金額錯誤。`);
     } else if (expenses.length !== 1 || expenses[0].date !== record.date || expenses[0].time !== record.time) {
       fail(`CSV 第 ${record.line} 列的報銷原支出關聯錯誤。`);
     }
@@ -407,6 +431,7 @@ function csvRecordMatchesTransaction(record, transaction) {
     && record.isPlannedClaim === (transaction.isPlannedClaim === true)
     && (record.claimBatchId || null) === (transaction.claimBatchId || null)
     && (record.claimNote || null) === (transaction.claimNote || null)
+    && (record.claimRatio ?? 100) === (transaction.claimRatio ?? 100)
     && (record.reimbursementExpenseId || null) === (transaction.reimbursementExpenseId || null)
     && JSON.stringify(reimbursementSourceIds(record)) === JSON.stringify(reimbursementSourceIds(transaction))
     && Boolean(record.isBatchReimbursement) === Boolean(transaction.isBatchReimbursement)
@@ -565,7 +590,7 @@ function planFromRecords(records, snapshot) {
             id: record.id, type: record.type, amount: record.amount, date: record.date, time: record.time, note: record.note,
             accountId: account.id, accountNameSnapshot: record.accountName,
             parentCategoryId: parent.id, parentCategoryNameSnapshot: record.parentCategoryName,
-            isDirectParentExpense: true, isPlannedClaim: record.isPlannedClaim, claimBatchId: record.claimBatchId || null, claimNote: record.claimNote || null, reimbursementTransactionId: record.reimbursementTransactionId || null, debtDirection: record.debtDirection, debtAmount: record.debtAmount, debtSourceId: null,
+            isDirectParentExpense: true, isPlannedClaim: record.isPlannedClaim, claimBatchId: record.claimBatchId || null, claimNote: record.claimNote || null, claimRatio: record.claimRatio, reimbursementTransactionId: record.reimbursementTransactionId || null, debtDirection: record.debtDirection, debtAmount: record.debtAmount, debtSourceId: null,
           });
           continue;
         }
@@ -575,7 +600,7 @@ function planFromRecords(records, snapshot) {
           accountId: account.id, accountNameSnapshot: record.accountName,
           parentCategoryId: parent.id, parentCategoryNameSnapshot: record.parentCategoryName,
           subcategoryId: category.id, subcategoryNameSnapshot: record.subcategoryName,
-          isPlannedClaim: record.isPlannedClaim, claimBatchId: record.claimBatchId || null, claimNote: record.claimNote || null, reimbursementTransactionId: record.reimbursementTransactionId || null,
+          isPlannedClaim: record.isPlannedClaim, claimBatchId: record.claimBatchId || null, claimNote: record.claimNote || null, claimRatio: record.claimRatio, reimbursementTransactionId: record.reimbursementTransactionId || null,
           debtDirection: record.debtDirection, debtAmount: record.debtAmount, debtSourceId: null,
         });
       }

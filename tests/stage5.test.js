@@ -81,6 +81,22 @@ export async function runStage5Tests() {
       assert(breakdown.totalExpense === 40 && summary.totalExpense === 40, '部分報銷差額沒有正確計入類別統計。');
     });
 
+    await test('合併請款依各項目請款比例個別計算未報銷差額，而非整批視為全額報銷', async () => {
+      const expenseFull = { id: 'batch-ratio-full', type: 'expense', amount: 1000, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, claimRatio: 100, reimbursementTransactionId: 'batch-ratio-reimbursement', date: '2026-09-01', time: '09:00' };
+      const expenseHalf = { id: 'batch-ratio-half', type: 'expense', amount: 1234, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, claimRatio: 50, reimbursementTransactionId: 'batch-ratio-reimbursement', date: '2026-09-01', time: '09:05' };
+      const batchReimbursement = {
+        id: 'batch-ratio-reimbursement', type: 'income', amount: 1610, accountId: cash.id, isReimbursement: true, isBatchReimbursement: true,
+        reimbursementExpenseIds: [expenseFull.id, expenseHalf.id],
+        reimbursementAmountsByExpenseId: { [expenseFull.id]: 1000, [expenseHalf.id]: 610 },
+        date: '2026-09-01', time: '09:10',
+      };
+      const batchQuery = runTransactionQuery([expenseFull, expenseHalf, batchReimbursement], {}, now);
+      assert(batchQuery.incomeTotal === 0, '合併請款收入不應計入收入統計。');
+      assert(batchQuery.expenseTotal === 624, `100% 項目應完全排除、50% 項目只計未報銷差額 624，實際為 ${batchQuery.expenseTotal}`);
+      const expenseOnly = runTransactionQuery([expenseFull, expenseHalf, batchReimbursement], { type: 'expense' }, now);
+      assert(expenseOnly.count === 1 && expenseOnly.expenseTotal === 624, '全額請款的項目仍出現在只看支出的結果中，或差額計算錯誤。');
+    });
+
     await test('借貸不重複計入收支，代墊支出只計自己的部分', async () => {
       const payableExpense = { id: 'debt-expense-payable', type: 'expense', amount: 300, debtDirection: 'payable', debtAmount: 200, parentCategoryId: food.id, subcategoryId: meal.id, date: '2026-08-24', time: '15:00' };
       const receivableExpense = { id: 'debt-expense-receivable', type: 'expense', amount: 300, debtDirection: 'receivable', debtAmount: 200, parentCategoryId: food.id, subcategoryId: meal.id, date: '2026-08-24', time: '15:10' };

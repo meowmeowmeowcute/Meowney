@@ -99,6 +99,25 @@ export async function runStage2Tests() {
       await repository.createBatchReimbursement([secondExpense.id], '恢復後續測試基準', '2026-08-24', '09:25');
     });
 
+    await test('合併請款依各項目的請款比例計算金額，100% 精確全額、其餘無條件捨去到十位', async () => {
+      const ratioAccount = await repository.createAccount({ name: '請款比例測試帳戶', initialBalance: 0 });
+      const expenseA = await repository.createTransaction({ type: 'expense', amount: 1234, claimRatio: 50, accountId: ratioAccount.id, parentCategoryId: food.id, subcategoryId: meal.id, isPlannedClaim: true, date: '2026-09-01', time: '09:00' });
+      const expenseB = await repository.createTransaction({ type: 'expense', amount: 999, claimRatio: 25, accountId: ratioAccount.id, parentCategoryId: food.id, subcategoryId: meal.id, isPlannedClaim: true, date: '2026-09-01', time: '09:05' });
+      const expenseC = await repository.createTransaction({ type: 'expense', amount: 1000, claimRatio: 100, accountId: ratioAccount.id, parentCategoryId: food.id, subcategoryId: meal.id, isPlannedClaim: true, date: '2026-09-01', time: '09:10' });
+      const expenseD = await repository.createTransaction({ type: 'expense', amount: 45, accountId: ratioAccount.id, parentCategoryId: food.id, subcategoryId: meal.id, isPlannedClaim: true, date: '2026-09-01', time: '09:15' });
+      assert(expenseD.claimRatio === 100, '未指定請款比例的支出應預設為 100%，與舊資料相容。');
+      const batch = await repository.createBatchReimbursement([expenseA.id, expenseB.id, expenseC.id, expenseD.id], '比例測試', '2026-09-02', '09:00');
+      assert(batch.reimbursement.amount === 1895, `合併請款總額應為 610+240+1000+45=1895，實際為 ${batch.reimbursement.amount}`);
+      const breakdown = batch.reimbursement.reimbursementAmountsByExpenseId;
+      assert(breakdown[expenseA.id] === 610 && breakdown[expenseB.id] === 240 && breakdown[expenseC.id] === 1000 && breakdown[expenseD.id] === 45, '各項目的請款金額明細計算錯誤。');
+
+      const zeroRatioExpense = await repository.createTransaction({ type: 'expense', amount: 500, claimRatio: 0, accountId: ratioAccount.id, parentCategoryId: food.id, subcategoryId: meal.id, isPlannedClaim: true, date: '2026-09-02', time: '10:00' });
+      await rejects(() => repository.createBatchReimbursement([zeroRatioExpense.id], '零比例', '2026-09-02', '10:05'), DataValidationError);
+
+      await rejects(() => repository.createTransaction({ type: 'expense', amount: 100, claimRatio: 150, accountId: ratioAccount.id, parentCategoryId: food.id, subcategoryId: meal.id, date: '2026-09-02', time: '10:10' }), DataValidationError);
+      await rejects(() => repository.createTransaction({ type: 'expense', amount: 100, claimRatio: -1, accountId: ratioAccount.id, parentCategoryId: food.id, subcategoryId: meal.id, date: '2026-09-02', time: '10:15' }), DataValidationError);
+    });
+
     await test('報銷會以原子方式新增連動收入，且金額可獨立處理', async () => {
       const beforeCount = (await repository.listTransactions()).length;
       const created = await repository.createExpenseWithReimbursement({ type: 'expense', amount: 80, accountId: cash.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '客戶午餐', isPlannedClaim: true, date: '2026-08-23', time: '12:30' }, { amount: 30, note: '客戶午餐' });

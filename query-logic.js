@@ -37,7 +37,11 @@ export function incomeExpenseAmount(transaction, transactions = []) {
   }
   if (transaction.type !== 'expense' || !transaction.reimbursementTransactionId) return transaction.amount;
   const reimbursement = transactions.find((item) => item.id === transaction.reimbursementTransactionId && item.isReimbursement === true);
-  if (!reimbursement || reimbursement.isBatchReimbursement === true) return 0;
+  if (!reimbursement) return 0;
+  if (reimbursement.isBatchReimbursement === true) {
+    const claimed = Number(reimbursement.reimbursementAmountsByExpenseId?.[transaction.id] ?? 0);
+    return Math.max(transaction.amount - claimed, 0);
+  }
   return Math.max(transaction.amount - reimbursement.amount, 0);
 }
 

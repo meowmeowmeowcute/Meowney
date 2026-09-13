@@ -186,6 +186,48 @@ export async function runStage7Tests() {
       assert(!validateBackup(invalidBackup).valid, '合併報銷金額不一致的 JSON 被錯誤接受。');
     });
 
+    await test('請款比例低於 100% 的合併請款可安全匯出並經 CSV／JSON 重新匯入', async () => {
+      const ratioSourceName = `meowney-stage7-ratio-source-${crypto.randomUUID()}`;
+      const ratioTargetName = `meowney-stage7-ratio-target-${crypto.randomUUID()}`;
+      let ratioSource;
+      let ratioTarget;
+      try {
+        ratioSource = await MeowneyRepository.open({ databaseName: ratioSourceName });
+        ratioTarget = await MeowneyRepository.open({ databaseName: ratioTargetName });
+        const ratioCash = await ratioSource.createAccount({ name: '現金', initialBalance: 0 });
+        const ratioFood = await ratioSource.createParentCategory({ name: '吃喝' });
+        const ratioMeal = await ratioSource.createSubcategory({ parentCategoryId: ratioFood.id, name: '餐飲' });
+        const expenseHalf = await ratioSource.createTransaction({ type: 'expense', amount: 1234, claimRatio: 50, accountId: ratioCash.id, parentCategoryId: ratioFood.id, subcategoryId: ratioMeal.id, isPlannedClaim: true, date: '2026-09-05', time: '09:00' });
+        const expenseFull = await ratioSource.createTransaction({ type: 'expense', amount: 45, accountId: ratioCash.id, parentCategoryId: ratioFood.id, subcategoryId: ratioMeal.id, isPlannedClaim: true, date: '2026-09-05', time: '09:05' });
+        const batch = await ratioSource.createBatchReimbursement([expenseHalf.id, expenseFull.id], '比例 CSV 測試', '2026-09-06', '09:00');
+        assert(batch.reimbursement.amount === 655, `50% 與 100% 混合的合併請款應為 610+45=655，實際為 ${batch.reimbursement.amount}`);
+
+        const ratioSnapshot = await ratioSource.getSnapshot();
+        assert(validateBackup(createBackup(ratioSnapshot)).valid, '含請款比例的 JSON 備份未通過驗證。');
+
+        const csv = exportTransactionsCsv(ratioSnapshot.transactions);
+        assert(csv.split('\r\n')[0].includes('請款比例'), 'CSV 標頭應包含請款比例欄位。');
+        assert(csv.includes(',50\r\n') || csv.includes(',50,'), 'CSV 應保留 50% 的請款比例數值。');
+        const plan = planCsvImport(csv, await ratioTarget.getSnapshot());
+        assert(plan.valid, `含請款比例的 CSV 無法建立匯入計畫：${plan.error}`);
+        await ratioTarget.importCsvPlan(plan.plan);
+        const imported = await ratioTarget.listTransactions();
+        const importedHalfExpense = imported.find((transaction) => transaction.id === expenseHalf.id);
+        const importedBatch = imported.find((transaction) => transaction.id === batch.reimbursement.id);
+        assert(importedHalfExpense?.claimRatio === 50, 'CSV 匯入沒有保留支出的請款比例。');
+        assert(importedBatch?.amount === 655, 'CSV 匯入的合併請款金額沒有依請款比例正確重新計算。');
+        assert(importedBatch?.reimbursementAmountsByExpenseId?.[expenseHalf.id] === 610 && importedBatch?.reimbursementAmountsByExpenseId?.[expenseFull.id] === 45, 'CSV 匯入沒有重建各項目的請款金額明細。');
+
+        const repeatPlan = planCsvImport(csv, await ratioTarget.getSnapshot());
+        assert(repeatPlan.valid && repeatPlan.summary.skippedTransactions === 3 && repeatPlan.summary.newTransactions === 0, '含請款比例的交易重複匯入沒有安全跳過。');
+      } finally {
+        ratioSource?.close();
+        ratioTarget?.close();
+        await deleteDatabase(ratioSourceName);
+        await deleteDatabase(ratioTargetName);
+      }
+    });
+
     await test('獨立借貸與部分結清可安全匯出及匯入 JSON、CSV', async () => {
       const debtTargetName = `meowney-stage7-debt-${crypto.randomUUID()}`;
       let debtTarget;

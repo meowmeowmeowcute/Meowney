@@ -97,7 +97,7 @@ export async function runStage8Tests() {
     assert(queryLogic.includes('Math.max(transaction.amount - reimbursement.amount, 0)') && queryLogic.includes('statisticalAmount: incomeExpenseAmount(transaction, transactions)'), '部分報銷沒有計算未報銷差額。');
     assert(queryLogic.includes('current.amount += amount') && queryLogic.includes('total + incomeExpenseAmount(transaction)'), '未報銷差額沒有套用到類別統計。');
     assert(app.includes('incomeExpenseAmount(transaction, state.transactions)'), '交易紀錄的日期淨額沒有使用報銷差額。');
-    assert(app.includes('原支出 ${currency(transaction.amount)} · 已報銷'), '部分報銷的查詢明細沒有說明原支出與已報銷金額。');
+    assert(app.includes('已請款 -${currency(claimed)}') && app.includes('function transactionClaimNoteMarkup'), '部分報銷的查詢明細沒有說明原始金額與已請款金額。');
     assert(html.includes('原始支出只計入尚未報銷的部分') && requirements.includes('報銷統計口徑'), '介面說明或需求紀錄缺少部分報銷統計口徑。');
   });
   await test('高頻記帳、首次使用、驗證與返回流程已完成便利性改善', async () => {

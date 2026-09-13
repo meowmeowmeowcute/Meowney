@@ -1,7 +1,9 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=45';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=45';
-import { calculateExpression, updateExpression } from './calculator.js?v=45';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=45';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=46';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=46';
+import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=46';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=46';
+
+const CLAIM_RATIO_PRESETS = [0, 10, 25, 50, 75, 100];
 
 const state = {
   repository: null,
@@ -151,8 +153,9 @@ function transactionTitleMarkup(transaction) {
   const reimbursementLabel = transaction.isReimbursement === true && transaction.note && transaction.isBatchReimbursement !== true
     ? '<small class="transaction-kind">報銷</small>'
     : '';
+  const plannedClaimRatio = Number.isFinite(transaction.claimRatio) ? transaction.claimRatio : 100;
   const plannedClaimLabel = transaction.type === 'expense' && transaction.isPlannedClaim === true
-    ? '<small class="transaction-kind transaction-kind--planned">預計請款</small>'
+    ? `<small class="transaction-kind transaction-kind--planned">預計請款${plannedClaimRatio !== 100 ? `（${plannedClaimRatio}%）` : ''}</small>`
     : '';
   const debtRemaining = transaction.debtDirection && transaction.type !== 'debt-settlement' ? calculateDebtRemaining(transaction, state.transactions) : null;
   const debtRelationship = transaction.type === 'debt'
@@ -193,24 +196,38 @@ function transactionNoteMarkup(transaction) {
   return transaction.note && transaction.type !== 'debt-settlement' && !usesNoteAsPrimaryTitle(transaction) && transaction.isBatchReimbursement !== true ? `<small class="transaction-note">${escapeHTML(transaction.note)}</small>` : '';
 }
 
+// 原始金額不因請款而消失：這裡只附加「已請款多少」的提示，實際列出的金額仍是原始金額。
+function transactionClaimNoteMarkup(transaction) {
+  if (transaction.type !== 'expense' || !transaction.reimbursementTransactionId) return '';
+  const effective = incomeExpenseAmount(transaction, state.transactions);
+  if (effective >= transaction.amount) return '';
+  const claimed = transaction.amount - effective;
+  return `<small class="transaction-note transaction-claim-note">已請款 -${currency(claimed)}</small>`;
+}
+
 function batchReimbursementItemsMarkup(transaction) {
   const sourceIds = Array.isArray(transaction.reimbursementExpenseIds) ? transaction.reimbursementExpenseIds : [];
   const sources = sourceIds
     .map((id) => state.transactions.find((item) => item.id === id))
     .filter(Boolean);
   if (!sources.length) return '<li class="batch-reimbursement-items__empty">找不到已包含的報銷項目。</li>';
-  return sources.map((source) => `<li><span>${escapeHTML(transactionTitle(source))}</span><strong>${currency(source.amount)}</strong></li>`).join('');
+  return sources.map((source) => {
+    const claimed = Number(transaction.reimbursementAmountsByExpenseId?.[source.id] ?? source.amount);
+    const partial = claimed < source.amount;
+    return `<li><span>${escapeHTML(transactionTitle(source))}${partial ? `<small class="claim-ratio-note">原始金額 ${currency(source.amount)} -${currency(source.amount - claimed)}</small>` : ''}</span><strong>${currency(claimed)}</strong></li>`;
+  }).join('');
 }
 function queryTransactionRowMarkup(transaction) {
-  const adjustedExpense = transaction.type === 'expense' && Number.isFinite(transaction.statisticalAmount) && transaction.statisticalAmount < transaction.amount;
-  const amountText = adjustedExpense ? `-${currency(transaction.statisticalAmount)}` : transactionAmountText(transaction);
-  const reimbursementDetail = adjustedExpense
-    ? `<small class="transaction-note">原支出 ${currency(transaction.amount)} · 已報銷 ${currency(transaction.amount - transaction.statisticalAmount)}</small>`
-    : '';
-  return `<div class="query-row"><div><b>${escapeHTML(transactionTitle(transaction))}</b><span>${escapeHTML(transaction.date)} · ${escapeHTML(transaction.accountName)} · ${escapeHTML(transaction.time)}</span>${transactionNoteMarkup(transaction)}${reimbursementDetail}</div><strong class="${transaction.type}">${amountText}</strong></div>`;
+  return `<div class="query-row"><div><b>${escapeHTML(transactionTitle(transaction))}</b><span>${escapeHTML(transaction.date)} · ${escapeHTML(transaction.accountName)} · ${escapeHTML(transaction.time)}</span>${transactionNoteMarkup(transaction)}${transactionClaimNoteMarkup(transaction)}</div><strong class="${transaction.type}">${transactionAmountText(transaction)}</strong></div>`;
+}
+function claimableAmount(transaction) {
+  return calculateClaimAmount(transaction.amount, Number.isFinite(transaction.claimRatio) ? transaction.claimRatio : 100);
+}
+function isZeroRatioClaim(transaction) {
+  return Number.isFinite(transaction.claimRatio) ? transaction.claimRatio <= 0 : false;
 }
 function prepareClaimSelection(status, transactions) {
-  const availableIds = new Set(transactions.map((transaction) => transaction.id));
+  const availableIds = new Set(transactions.filter((transaction) => !isZeroRatioClaim(transaction)).map((transaction) => transaction.id));
   if (state.claimSelectionStatus !== status) {
     const accountIds = new Set(transactions.map((transaction) => transaction.accountId));
     state.claimSelection = accountIds.size === 1 ? new Set(availableIds) : new Set();
@@ -227,8 +244,11 @@ function selectedClaimTransactions() {
 function selectedClaimAccountId() { return selectedClaimTransactions()[0]?.accountId || null; }
 function claimSelectionRowMarkup(transaction, lockedAccountId) {
   const selected = state.claimSelection.has(transaction.id);
-  const blocked = Boolean(lockedAccountId && transaction.accountId !== lockedAccountId);
-  return `<label class="claim-selectable ${blocked ? 'claim-selectable--blocked' : ''}"><input type="checkbox" data-claim-select="${transaction.id}" ${selected ? 'checked' : ''} ${blocked ? 'disabled' : ''} aria-label="選擇 ${escapeHTML(transactionTitle(transaction))}" />${queryTransactionRowMarkup(transaction)}</label>`;
+  const zeroRatio = isZeroRatioClaim(transaction);
+  const blocked = Boolean(lockedAccountId && transaction.accountId !== lockedAccountId) || zeroRatio;
+  const ratio = Number.isFinite(transaction.claimRatio) ? transaction.claimRatio : 100;
+  const ratioNote = `<small class="claim-ratio-note">請款比例 ${ratio}%${zeroRatio ? '，比例 0% 無法勾選' : ` · 可請款 ${currency(claimableAmount(transaction))}`}</small>`;
+  return `<label class="claim-selectable ${blocked ? 'claim-selectable--blocked' : ''}"><input type="checkbox" data-claim-select="${transaction.id}" ${selected ? 'checked' : ''} ${blocked ? 'disabled' : ''} aria-label="選擇 ${escapeHTML(transactionTitle(transaction))}${zeroRatio ? '，比例 0% 無法勾選' : ''}" /><div>${queryTransactionRowMarkup(transaction)}${ratioNote}</div></label>`;
 }
 function claimAccountGroups(transactions) {
   const groups = new Map();
@@ -241,7 +261,7 @@ function claimAccountGroups(transactions) {
 function updateClaimActionLabel() {
   const selected = selectedClaimTransactions();
   const accountName = selected[0]?.accountName || '尚未選擇';
-  const selectedTotal = selected.reduce((total, transaction) => total + transaction.amount, 0);
+  const selectedTotal = selected.reduce((total, transaction) => total + claimableAmount(transaction), 0);
   const accountCount = claimAccountGroups(state.claimCandidates).length;
   $('#claim-selected-count').textContent = `${selected.length} 筆`;
   $('#claim-selected-account').textContent = accountName;
@@ -263,7 +283,7 @@ function renderClaimSelection(transactions, { prepare = false } = {}) {
   const lockedAccountId = selectedClaimAccountId();
   $('#planned-claim-query-list').innerHTML = transactions.length
     ? claimAccountGroups(transactions).map((group) => `<section class="claim-account-group" aria-label="${escapeHTML(group.accountName)}待報銷項目">
-      <header class="claim-account-group__heading"><span><b>${escapeHTML(group.accountName)}</b><small>${group.transactions.length} 筆 · ${currency(group.transactions.reduce((total, transaction) => total + transaction.amount, 0))}</small></span><button class="button button--secondary" type="button" data-select-claim-account="${group.accountId}">${lockedAccountId && lockedAccountId !== group.accountId ? '改選此帳戶' : '全選此帳戶'}</button></header>
+      <header class="claim-account-group__heading"><span><b>${escapeHTML(group.accountName)}</b><small>${group.transactions.length} 筆 · 可請款合計 ${currency(group.transactions.reduce((total, transaction) => total + claimableAmount(transaction), 0))}</small></span><button class="button button--secondary" type="button" data-select-claim-account="${group.accountId}">${lockedAccountId && lockedAccountId !== group.accountId ? '改選此帳戶' : '全選此帳戶'}</button></header>
       ${group.transactions.map((transaction) => claimSelectionRowMarkup(transaction, lockedAccountId)).join('')}
     </section>`).join('')
     : '<div class="empty-state">沒有可合併的支出。只有標記「預計請款」且尚未報銷的支出會顯示。</div>';
@@ -274,7 +294,7 @@ function renderClaimSelection(transactions, { prepare = false } = {}) {
     renderClaimSelection(transactions);
   }));
   $$('[data-select-claim-account]').forEach((button) => button.addEventListener('click', () => {
-    state.claimSelection = new Set(transactions.filter((transaction) => transaction.accountId === button.dataset.selectClaimAccount).map((transaction) => transaction.id));
+    state.claimSelection = new Set(transactions.filter((transaction) => transaction.accountId === button.dataset.selectClaimAccount && !isZeroRatioClaim(transaction)).map((transaction) => transaction.id));
     renderClaimSelection(transactions);
   }));
 }
@@ -304,7 +324,7 @@ function renderTransactions() {
       <header class="date-group__header"><h3>${formatDate(date)}${relativeLabel ? `<small>${relativeLabel}</small>` : ''}</h3><strong class="${net > 0 ? 'positive' : net < 0 ? 'negative' : ''}">${net === 0 ? currency(0) : signedCurrency(net)}</strong></header>
       ${records.map((transaction) => `<button class="transaction-row" type="button" data-edit-id="${transaction.id}" aria-label="${transaction.type === 'debt-settlement' ? '查看' : '編輯'} ${escapeHTML(transactionTitle(transaction))} ${transactionAmountText(transaction)}${transaction.isBatchReimbursement === true ? '，查看已報銷項目' : transaction.type !== 'debt-settlement' && transaction.note ? `，備註 ${escapeHTML(transaction.note)}` : ''}">
         <span class="transaction-icon" aria-hidden="true">${transactionIcon(transaction)}</span>
-        <span class="transaction-details">${transactionTitleMarkup(transaction)}<span>${escapeHTML(transactionMeta(transaction))}</span>${transactionNoteMarkup(transaction)}</span>
+        <span class="transaction-details">${transactionTitleMarkup(transaction)}<span>${escapeHTML(transactionMeta(transaction))}</span>${transactionNoteMarkup(transaction)}${transactionClaimNoteMarkup(transaction)}</span>
         <strong class="transaction-amount ${transaction.type}">${transactionAmountText(transaction)}</strong>
       </button>`).join('')}
     </section>`;
@@ -367,6 +387,7 @@ function applyTypeDefaults(form, type) {
   form.debtDirection = type === 'debt' ? (form.debtDirection || 'payable') : null;
   form.debtAmountText = '';
   form.isPlannedClaim = false;
+  form.claimRatio = 100;
   form.reimbursementEnabled = false;
   if (type === 'transfer') {
     form.accountId = null;
@@ -388,7 +409,7 @@ function applyTypeDefaults(form, type) {
 }
 
 function createBlankForm() {
-  const form = { id: null, type: 'expense', amountText: '', amountExpression: '', accountId: null, parentId: null, categoryId: null, sourceAccountId: null, targetAccountId: null, note: '', debtDirection: null, debtAmountText: '', debtAmountTouched: false, settlementAccountId: null, isDebtSettlement: false, debtSourceId: null, isPlannedClaim: false, reimbursementEnabled: false, reimbursementAmountText: '', reimbursementAmountTouched: false, reimbursementNote: '', reimbursementNoteTouched: false, isReimbursement: false, isBatchReimbursement: false, reimbursementExpenseIds: [], reimbursementBatchNote: '', date: todayValue(), time: timeValue() };
+  const form = { id: null, type: 'expense', amountText: '', amountExpression: '', accountId: null, parentId: null, categoryId: null, sourceAccountId: null, targetAccountId: null, note: '', debtDirection: null, debtAmountText: '', debtAmountTouched: false, settlementAccountId: null, isDebtSettlement: false, debtSourceId: null, isPlannedClaim: false, claimRatio: 100, reimbursementEnabled: false, reimbursementAmountText: '', reimbursementAmountTouched: false, reimbursementNote: '', reimbursementNoteTouched: false, isReimbursement: false, isBatchReimbursement: false, reimbursementExpenseIds: [], reimbursementBatchNote: '', reimbursementAmountsByExpenseId: null, date: todayValue(), time: timeValue() };
   return applyTypeDefaults(form, 'expense');
 }
 
@@ -422,6 +443,8 @@ function formFromTransaction(transaction) {
     isPlannedClaim: transaction.isPlannedClaim === true,
     claimBatchId: transaction.claimBatchId || null,
     claimNote: transaction.claimNote || '',
+    claimRatio: Number.isFinite(transaction.claimRatio) ? transaction.claimRatio : 100,
+    reimbursementAmountsByExpenseId: transaction.reimbursementAmountsByExpenseId || null,
     reimbursementEnabled: Boolean(reimbursement),
     reimbursementAmountText: reimbursement ? String(reimbursement.amount) : '',
     reimbursementAmountTouched: Boolean(reimbursement),
@@ -582,6 +605,7 @@ function renderSheet() {
       : `本次帳戶扣 ${currency(totalAmount)}，其中 ${currency(debtAmount)} 待收；支出計 ${currency(Math.max(totalAmount - debtAmount, 0))}。`;
   $('#planned-claim-toggle').setAttribute('aria-pressed', String(form.isPlannedClaim));
   $('#planned-claim-toggle').classList.toggle('quick-claim-toggle--active', form.isPlannedClaim);
+  renderClaimRatioSection();
   $('#reimbursement-linked-info').hidden = !reimbursementReadOnly || batchReimbursementReadOnly;
   $('#reimbursement-toggle').setAttribute('aria-pressed', String(form.reimbursementEnabled));
   $('#reimbursement-toggle').classList.toggle('reimbursement-toggle--active', form.reimbursementEnabled);
@@ -639,6 +663,40 @@ function renderSheet() {
   $$('[data-edit-settlement]').forEach((button) => button.addEventListener('click', () => openSheet(button.dataset.editSettlement)));
 }
 
+function claimRatioPreviewText(amount, ratio) {
+  if (amount <= 0) return '輸入金額後可預覽可請款金額。';
+  if (ratio >= 100) return `合併請款時可全額請款 ${currency(amount)}。`;
+  if (ratio <= 0) return '比例為 0% 時，這筆無法加入合併請款。';
+  return `合併請款時約可請款 ${currency(calculateClaimAmount(amount, ratio))}（已無條件捨去到十位）。`;
+}
+
+function renderClaimRatioSection() {
+  const form = state.form;
+  if (!form) return;
+  const reimbursementReadOnly = form.isReimbursement === true;
+  const batchReimbursementSource = !reimbursementReadOnly && form.isBatchReimbursement === true;
+  const visible = form.type === 'expense' && form.isPlannedClaim === true && !reimbursementReadOnly && !batchReimbursementSource && !form.debtDirection;
+  $('#claim-ratio-section').hidden = !visible;
+  if (!visible) return;
+  const ratio = Math.min(100, Math.max(0, Number.isFinite(Number(form.claimRatio)) ? Number(form.claimRatio) : 100));
+  const matchesPreset = CLAIM_RATIO_PRESETS.includes(ratio);
+  $('#claim-ratio-options').innerHTML = [
+    ...CLAIM_RATIO_PRESETS.map((value) => `<button type="button" class="chip ${ratio === value ? 'chip--active' : ''}" data-claim-ratio="${value}" aria-pressed="${ratio === value}">${value}%</button>`),
+    `<button type="button" class="chip ${!matchesPreset ? 'chip--active' : ''}" data-claim-ratio-custom aria-pressed="${!matchesPreset}">其他</button>`,
+  ].join('');
+  $$('#claim-ratio-options [data-claim-ratio]').forEach((button) => button.addEventListener('click', () => {
+    state.form.claimRatio = Number(button.dataset.claimRatio);
+    renderClaimRatioSection();
+  }));
+  $('#claim-ratio-options [data-claim-ratio-custom]')?.addEventListener('click', () => {
+    $('#claim-ratio-custom-field').hidden = false;
+    setTimeout(() => $('#claim-ratio-custom-input').focus(), 0);
+  });
+  $('#claim-ratio-custom-field').hidden = matchesPreset;
+  $('#claim-ratio-custom-input').value = String(ratio);
+  $('#claim-ratio-preview').textContent = claimRatioPreviewText(Number(form.amountText || 0), ratio);
+}
+
 function notifyIfSameTransferAccount() {
   const form = state.form;
   if (form.sourceAccountId && form.sourceAccountId === form.targetAccountId) showFormError('轉帳的來源與目的帳戶不可相同，請重新選擇其中一邊。', { selector: '#transfer-account-section' });
@@ -669,6 +727,9 @@ function appendAmount(key) {
   if (state.form.type === 'expense' && state.form.debtDirection && !state.form.debtAmountTouched) {
     state.form.debtAmountText = state.form.amountText;
     $('#debt-amount-input').value = state.form.debtAmountText;
+  }
+  if (state.form.type === 'expense' && state.form.isPlannedClaim) {
+    $('#claim-ratio-preview').textContent = claimRatioPreviewText(Number(state.form.amountText) || 0, Number(state.form.claimRatio ?? 100));
   }
 }
 
@@ -767,7 +828,7 @@ function transactionInputFromForm() {
     return { type: form.type, amount: Number(form.amountText), sourceAccountId: form.sourceAccountId, targetAccountId: form.targetAccountId, note: form.note.trim(), date: form.date, time: form.time };
   }
   const input = { type: form.type, amount: Number(form.amountText), accountId: form.accountId, note: form.note.trim(), date: form.date, time: form.time };
-  return form.type === 'expense' ? { ...input, parentCategoryId: form.parentId, subcategoryId: form.categoryId, isPlannedClaim: form.isPlannedClaim, debtDirection: form.debtDirection, debtAmount: form.debtDirection ? Number(form.debtAmountText) : null } : form.type === 'debt' ? { ...input, debtDirection: form.debtDirection } : input;
+  return form.type === 'expense' ? { ...input, parentCategoryId: form.parentId, subcategoryId: form.categoryId, isPlannedClaim: form.isPlannedClaim, claimRatio: form.claimRatio, debtDirection: form.debtDirection, debtAmount: form.debtDirection ? Number(form.debtAmountText) : null } : form.type === 'debt' ? { ...input, debtDirection: form.debtDirection } : input;
 }
 
 async function saveDebtSettlement() {
@@ -976,7 +1037,7 @@ function renderQuery() {
       : '<div class="empty-state">沒有符合條件的交易。</div>';
   }
   if (hasPlannedClaims && !query.error) {
-    $('#planned-claim-query-total').textContent = currency(query.expenseTotal);
+    $('#planned-claim-query-total').textContent = currency(query.results.reduce((total, transaction) => total + claimableAmount(transaction), 0));
     $('#planned-claim-query-count').textContent = `${query.count} 筆可選`;
     renderClaimSelection(query.results, { prepare: true });
     $('#planned-claim-actions').hidden = !query.results.length;
@@ -1000,7 +1061,7 @@ async function createBatchReimbursement() {
   if (!transactionIds.length) return showToast('請至少選擇一筆未請款支出。');
   const accountIds = new Set(selected.map((transaction) => transaction.accountId));
   if (accountIds.size !== 1) return showToast('不同帳戶必須分開建立合併報銷。');
-  const selectedTotal = selected.reduce((total, transaction) => total + transaction.amount, 0);
+  const selectedTotal = selected.reduce((total, transaction) => total + claimableAmount(transaction), 0);
   const accountName = selected[0].accountName;
   if (!window.confirm(`將「${accountName}」的 ${selected.length} 筆支出合併為一筆 ${currency(selectedTotal)} 的報銷收入。建立後原支出會取消預計請款，確定建立嗎？`)) return;
   try {
@@ -1290,6 +1351,20 @@ function initialiseEvents() {
     if (!state.form || state.form.type !== 'expense' || state.form.isReimbursement || state.form.claimBatchId) return;
     state.form.isPlannedClaim = !state.form.isPlannedClaim;
     renderSheet();
+  });
+  $('#claim-ratio-custom-input').addEventListener('input', (event) => {
+    if (!state.form) return;
+    clearFormValidation();
+    const number = Number(event.target.value);
+    const ratio = event.target.value === '' ? 0 : Math.min(100, Math.max(0, Number.isFinite(number) ? number : 0));
+    state.form.claimRatio = ratio;
+    $$('#claim-ratio-options [data-claim-ratio]').forEach((button) => {
+      const active = Number(button.dataset.claimRatio) === ratio;
+      button.classList.toggle('chip--active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+    $('#claim-ratio-options [data-claim-ratio-custom]')?.classList.toggle('chip--active', !CLAIM_RATIO_PRESETS.includes(ratio));
+    $('#claim-ratio-preview').textContent = claimRatioPreviewText(Number(state.form.amountText || 0), ratio);
   });
   $('#reimbursement-amount-input').addEventListener('click', () => openAmountEditor('reimbursementAmountText', '報銷金額'));
   $('#debt-amount-input').addEventListener('click', () => openAmountEditor('debtAmountText', state.form?.debtDirection === 'receivable' ? '別人欠我的金額' : '我欠別人的金額'));

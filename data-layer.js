@@ -3,6 +3,8 @@
  * 所有餘額皆由帳戶初始餘額與交易重新計算，不會寫入可失真的快取餘額。
  */
 
+import { calculateClaimAmount } from './calculator.js?v=46';
+
 export const DATABASE_NAME = 'meowney-ledger';
 export const DATABASE_VERSION = 1;
 export const DIRECT_EXPENSE_PARENT_CATEGORY_NAME = '其他';
@@ -81,6 +83,12 @@ function requireTransactionType(value) {
 function requireDebtDirection(value) {
   if (!['payable', 'receivable'].includes(value)) throw new DataValidationError('請選擇我欠別人或別人欠我。');
   return value;
+}
+
+function requireClaimRatio(value) {
+  const ratio = Number(value);
+  if (!Number.isFinite(ratio) || ratio < 0 || ratio > 100) throw new DataValidationError('請款比例必須是 0 至 100 之間的數字。');
+  return ratio;
 }
 
 function createSchema(database) {
@@ -199,6 +207,7 @@ async function buildNormalTransaction(stores, input, type, existing = null) {
   const isPlannedClaim = input.isPlannedClaim ?? existing?.isPlannedClaim ?? false;
   const claimBatchId = type === 'expense' ? existing?.claimBatchId || null : null;
   const claimNote = type === 'expense' ? existing?.claimNote ?? null : null;
+  const claimRatio = type === 'expense' ? requireClaimRatio(input.claimRatio ?? existing?.claimRatio ?? 100) : null;
   if (typeof isPlannedClaim !== 'boolean') throw new DataValidationError('預計請款設定格式錯誤。');
   if (type !== 'expense' && isPlannedClaim) throw new DataValidationError('只有支出可標記預計請款。');
   if (claimBatchId && !isPlannedClaim) throw new DataValidationError('已請款項目不可直接取消預計請款。');
@@ -228,10 +237,12 @@ async function buildNormalTransaction(stores, input, type, existing = null) {
     isPlannedClaim: type === 'expense' && isPlannedClaim,
     claimBatchId,
     claimNote,
+    claimRatio,
     reimbursementExpenseId: null,
     reimbursementExpenseIds: null,
     isBatchReimbursement: false,
     reimbursementBatchNote: null,
+    reimbursementAmountsByExpenseId: null,
     reimbursementTransactionId: type === 'expense' ? existing?.reimbursementTransactionId || null : null,
     sourceAccountId: null,
     sourceAccountNameSnapshot: null,
@@ -286,10 +297,12 @@ async function buildDebtTransaction(stores, input, existing = null) {
     isPlannedClaim: false,
     claimBatchId: null,
     claimNote: null,
+    claimRatio: null,
     reimbursementExpenseId: null,
     reimbursementExpenseIds: null,
     isBatchReimbursement: false,
     reimbursementBatchNote: null,
+    reimbursementAmountsByExpenseId: null,
     reimbursementTransactionId: null,
     sourceAccountId: null,
     sourceAccountNameSnapshot: null,
@@ -320,10 +333,12 @@ async function buildDebtSettlementTransaction(stores, source, input) {
     isPlannedClaim: false,
     claimBatchId: null,
     claimNote: null,
+    claimRatio: null,
     reimbursementExpenseId: null,
     reimbursementExpenseIds: null,
     isBatchReimbursement: false,
     reimbursementBatchNote: null,
+    reimbursementAmountsByExpenseId: null,
     reimbursementTransactionId: null,
     sourceAccountId: null,
     sourceAccountNameSnapshot: null,
@@ -381,10 +396,12 @@ function buildReimbursementTransaction(expense, input = {}, existing = null) {
     isPlannedClaim: false,
     claimBatchId: null,
     claimNote: null,
+    claimRatio: null,
     reimbursementExpenseId: expense.id,
     reimbursementExpenseIds: [expense.id],
     isBatchReimbursement: false,
     reimbursementBatchNote: null,
+    reimbursementAmountsByExpenseId: null,
     reimbursementTransactionId: null,
     sourceAccountId: null,
     sourceAccountNameSnapshot: null,
@@ -397,13 +414,23 @@ function buildReimbursementTransaction(expense, input = {}, existing = null) {
   };
 }
 
+// 每個原支出依其「請款比例」個別計算可請款金額（比例 100% 為原始金額，其餘無條件捨去到十位），
+// 合併報銷的總金額永遠等於這些個別金額的合計，而不是原支出金額的合計。
+function batchReimbursementAmounts(expenses) {
+  const amountsByExpenseId = Object.fromEntries(expenses.map((expense) => [expense.id, calculateClaimAmount(expense.amount, expense.claimRatio ?? 100)]));
+  const total = Object.values(amountsByExpenseId).reduce((sum, value) => sum + value, 0);
+  return { amountsByExpenseId, total };
+}
+
 function buildBatchReimbursementTransaction(expenses, note, input = {}, existing = null) {
   if (!Array.isArray(expenses) || !expenses.length) throw new DataValidationError('請至少選擇一筆未請款支出。');
   const accountId = expenses[0].accountId;
   if (expenses.some((expense) => expense.accountId !== accountId)) throw new DataValidationError('合併報銷只能包含同一帳戶的支出，請先用帳戶篩選。');
+  const { amountsByExpenseId, total } = batchReimbursementAmounts(expenses);
+  if (total <= 0) throw new DataValidationError('所選支出依請款比例計算後的合計金額為 0，請先調整請款比例。');
   const transaction = transactionBase({
     id: existing?.id,
-    amount: expenses.reduce((sum, expense) => sum + expense.amount, 0),
+    amount: total,
     date: input.date ?? existing?.date,
     time: input.time ?? existing?.time,
     note: batchReimbursementNote(expenses, note),
@@ -423,10 +450,12 @@ function buildBatchReimbursementTransaction(expenses, note, input = {}, existing
     isPlannedClaim: false,
     claimBatchId: null,
     claimNote: null,
+    claimRatio: null,
     reimbursementExpenseId: null,
     reimbursementExpenseIds: expenses.map((expense) => expense.id),
     isBatchReimbursement: true,
     reimbursementBatchNote: typeof note === 'string' ? note.trim() : '',
+    reimbursementAmountsByExpenseId: amountsByExpenseId,
     reimbursementTransactionId: null,
     sourceAccountId: null,
     sourceAccountNameSnapshot: null,
@@ -461,10 +490,12 @@ async function buildTransferTransaction(stores, input, existing = null) {
     isPlannedClaim: false,
     claimBatchId: null,
     claimNote: null,
+    claimRatio: null,
     reimbursementExpenseId: null,
     reimbursementExpenseIds: null,
     isBatchReimbursement: false,
     reimbursementBatchNote: null,
+    reimbursementAmountsByExpenseId: null,
     reimbursementTransactionId: null,
     sourceAccountId: source.id,
     sourceAccountNameSnapshot: source.name,
@@ -484,6 +515,7 @@ async function buildCsvNormalTransaction(stores, input) {
   const claimBatchId = input.claimBatchId || null;
   const claimNote = input.claimNote ?? null;
   if ((claimBatchId || claimNote) && !(input.type === 'expense' && input.isPlannedClaim === true)) throw new DataValidationError('CSV 請款單關聯錯誤。');
+  const claimRatio = input.type === 'expense' ? requireClaimRatio(input.claimRatio ?? 100) : null;
   const hasCategory = input.type === 'expense' || input.parentCategoryId || input.subcategoryId || input.parentCategoryNameSnapshot || input.subcategoryNameSnapshot;
   const transaction = {
     ...transactionBase(input, input.type),
@@ -499,10 +531,12 @@ async function buildCsvNormalTransaction(stores, input) {
     isPlannedClaim: input.type === 'expense' && input.isPlannedClaim === true,
     claimBatchId: input.type === 'expense' ? claimBatchId : null,
     claimNote: input.type === 'expense' ? claimNote : null,
+    claimRatio,
     reimbursementExpenseId: input.type === 'income' && input.isReimbursement === true ? input.reimbursementExpenseId || null : null,
     reimbursementExpenseIds: input.type === 'income' && input.isReimbursement === true ? reimbursementSourceIds(input) : null,
     isBatchReimbursement: input.type === 'income' && input.isBatchReimbursement === true,
     reimbursementBatchNote: input.type === 'income' && input.isBatchReimbursement === true ? input.reimbursementBatchNote || '' : null,
+    reimbursementAmountsByExpenseId: null,
     reimbursementTransactionId: input.type === 'expense' ? input.reimbursementTransactionId || null : null,
     sourceAccountId: null,
     sourceAccountNameSnapshot: null,
@@ -554,10 +588,12 @@ async function buildCsvTransferTransaction(stores, input) {
     isPlannedClaim: false,
     claimBatchId: null,
     claimNote: null,
+    claimRatio: null,
     reimbursementExpenseId: null,
     reimbursementExpenseIds: null,
     isBatchReimbursement: false,
     reimbursementBatchNote: null,
+    reimbursementAmountsByExpenseId: null,
     reimbursementTransactionId: null,
     sourceAccountId: source.id,
     sourceAccountNameSnapshot: requireText(input.sourceAccountNameSnapshot, 'CSV 來源帳戶名稱'),
@@ -579,6 +615,7 @@ function skippedCsvTransactionStillMatches(record, transaction) {
     && record.isPlannedClaim === (transaction.isPlannedClaim === true)
     && (record.claimBatchId || null) === (transaction.claimBatchId || null)
     && (record.claimNote || null) === (transaction.claimNote || null)
+    && (record.claimRatio ?? 100) === (transaction.claimRatio ?? 100)
     && (record.reimbursementExpenseId || null) === (transaction.reimbursementExpenseId || null)
     && JSON.stringify(reimbursementSourceIds(record)) === JSON.stringify(reimbursementSourceIds(transaction))
     && Boolean(record.isBatchReimbursement) === Boolean(transaction.isBatchReimbursement)
@@ -632,8 +669,10 @@ async function validateReimbursementLink(stores, transaction) {
       }
       expenses.push(expense);
     }
-    if (isBatch && transaction.amount !== expenses.reduce((sum, expense) => sum + expense.amount, 0)) {
-      throw new DataValidationError('CSV 合併報銷金額必須等於原支出合計。');
+    if (isBatch) {
+      const { amountsByExpenseId, total } = batchReimbursementAmounts(expenses);
+      if (transaction.amount !== total) throw new DataValidationError('CSV 合併報銷金額必須等於各原支出依請款比例計算後的合計。');
+      await requestAsPromise(stores.transactions.put({ ...transaction, reimbursementAmountsByExpenseId: amountsByExpenseId }));
     }
   }
   if (transaction.reimbursementTransactionId) {
@@ -917,6 +956,7 @@ export class MeowneyRepository {
         if (transaction.type !== 'expense' || transaction.isPlannedClaim !== true || transaction.reimbursementTransactionId) {
           throw new DataValidationError('選取項目已變更，請重新查詢後再建立合併報銷。');
         }
+        if (Number(transaction.claimRatio ?? 100) <= 0) throw new DataValidationError('請款比例為 0% 的項目無法加入合併請款，請先取消勾選或調整比例。');
         selected.push(transaction);
       }
       const reimbursement = buildBatchReimbursementTransaction(selected, note, { date, time });

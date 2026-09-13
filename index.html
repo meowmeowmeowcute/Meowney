@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/meowney-512.png" type="image/png" />
     <link rel="apple-touch-icon" href="icons/meowney-192.png" />
-    <link rel="stylesheet" href="styles.css?v=45" />
+    <link rel="stylesheet" href="styles.css?v=46" />
   </head>
   <body>
     <div class="app-shell">
@@ -248,6 +248,17 @@
 
         <section id="more-options" class="more-options" aria-label="交易詳細設定">
           <div class="more-options__body">
+        <section id="claim-ratio-section" class="entry-section reimbursement-section claim-ratio-section" aria-labelledby="claim-ratio-label" hidden>
+          <div class="field-label">
+            <h3 id="claim-ratio-label">請款比例</h3>
+            <span>合併請款時依此比例計算</span>
+          </div>
+          <div id="claim-ratio-options" class="chip-row" role="group" aria-label="請款比例快速選項"></div>
+          <label id="claim-ratio-custom-field" class="note-field claim-ratio-custom-field" hidden>自訂比例（0-100）
+            <input id="claim-ratio-custom-input" type="number" min="0" max="100" step="1" inputmode="numeric" placeholder="輸入 0-100 的數字" />
+          </label>
+          <p id="claim-ratio-preview" class="claim-ratio-preview"></p>
+        </section>
         <section id="debt-section" class="entry-section reimbursement-section debt-section" aria-labelledby="debt-label" hidden>
           <div class="field-label"><h3 id="debt-label">借貸狀態</h3><span id="debt-guidance">這筆支出是否包含欠款</span></div>
           <div class="debt-direction" role="group" aria-label="借貸方向">
@@ -355,6 +366,6 @@
     </section>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script type="module" src="app.js?v=45"></script>
+    <script type="module" src="app.js?v=46"></script>
   </body>
 </html>

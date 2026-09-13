@@ -231,6 +231,12 @@ textarea { padding: 11px; resize: vertical; }
 .debt-overview-list span, .debt-overview-list b, .debt-overview-list small { display: block; }
 .debt-overview-list small { margin-top: 3px; color: var(--muted); font-size: 11px; }
 .debt-overview-list strong { color: #efd094; font-size: 13px; white-space: nowrap; }
+.claim-ratio-section { border-color: #4a5a3a; background: linear-gradient(135deg, rgba(58, 74, 34, .5), rgba(29, 35, 36, .72)); }
+.claim-ratio-custom-field { margin-top: 11px; max-width: 200px; }
+.claim-ratio-custom-field input { font-variant-numeric: tabular-nums; text-align: right; }
+.claim-ratio-preview { margin: 11px 0 0; color: #d3e8b9; font-size: 12px; line-height: 1.5; }
+.claim-ratio-note { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; }
+.transaction-claim-note { color: #e8bd6a; }
 .reimbursement-section { padding: 13px; border: 1px solid #334840; border-radius: 15px; background: linear-gradient(135deg, rgba(29, 61, 49, .56), rgba(29, 35, 36, .72)); }
 .reimbursement-section .field-label { margin-bottom: 8px; }
 .reimbursement-toggle { display: flex; width: 100%; min-height: 54px; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid #3d4948; border-radius: 12px; background: #232a2a; color: var(--text); text-align: left; }

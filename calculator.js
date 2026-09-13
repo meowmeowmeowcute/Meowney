@@ -28,6 +28,31 @@ export function calculateExpression(expression) {
   return Number.isFinite(value) ? { value: cleanNumber(value), error: null } : { value: null, error: '計算結果無效' };
 }
 
+// 無條件捨去到十位；以放大 100 倍的整數運算，避免浮點數誤差。
+export function floorToTens(value) {
+  const scaled = Math.round(Number(value) * 100);
+  if (!Number.isFinite(scaled)) return 0;
+  const remainder = ((scaled % 1000) + 1000) % 1000;
+  return (scaled - remainder) / 100;
+}
+
+// 依請款比例（0-100）計算可請款金額：比例 100% 維持原始金額，其餘比例的結果無條件捨去到十位。
+// 全程以整數運算（金額、比例各放大 100 倍）取代浮點乘除，避免精度誤差。
+export function calculateClaimAmount(amount, ratioPercent) {
+  const amt = Number(amount);
+  if (!Number.isFinite(amt) || amt <= 0) return 0;
+  const ratioInput = Number(ratioPercent);
+  const ratio = Math.min(100, Math.max(0, Number.isFinite(ratioInput) ? ratioInput : 100));
+  if (ratio <= 0) return 0;
+  if (ratio >= 100) return amt;
+  const scaledAmount = Math.round(amt * 100);
+  const scaledRatio = Math.round(ratio * 100);
+  const numerator = scaledAmount * scaledRatio;
+  const remainder = numerator % 10000000;
+  const quotient = (numerator - remainder) / 10000000;
+  return quotient * 10;
+}
+
 export function updateExpression(expression, key, { maxLength = 32 } = {}) {
   let next = String(expression || '');
   if (key === 'AC') return { expression: '', ...calculateExpression('') };
