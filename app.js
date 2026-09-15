@@ -1,7 +1,7 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=47';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=47';
-import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=47';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=47';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=48';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=48';
+import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=48';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=48';
 
 const DEFAULT_CLAIM_RATIO_PRESETS = [66, 100];
 
@@ -21,6 +21,7 @@ const state = {
   claimCandidates: [],
   transactionDefaults: {},
   claimRatioPresets: [...DEFAULT_CLAIM_RATIO_PRESETS],
+  templates: [],
   amountEditor: null,
 };
 let sheetDrag = null;
@@ -356,6 +357,129 @@ function renderDebtOverview() {
   $$('[data-open-debt]').forEach((button) => button.addEventListener('click', () => openSheet(button.dataset.openDebt)));
 }
 
+function templateIsValid(template) {
+  if (template.type === 'transfer') {
+    return template.sourceAccountId !== template.targetAccountId
+      && state.accounts.some((account) => account.id === template.sourceAccountId)
+      && state.accounts.some((account) => account.id === template.targetAccountId);
+  }
+  if (!state.accounts.some((account) => account.id === template.accountId)) return false;
+  if (template.type !== 'expense') return true;
+  const parent = state.categories.find((item) => item.id === template.parentCategoryId);
+  if (!parent) return false;
+  if (parent.allowsDirectExpense && !template.subcategoryId) return true;
+  return parent.children.some((child) => child.id === template.subcategoryId);
+}
+
+function templateSummary(template) {
+  const typeLabel = template.type === 'expense' ? '支出' : template.type === 'income' ? '收入' : '轉帳';
+  if (template.type === 'transfer') {
+    const source = state.accounts.find((account) => account.id === template.sourceAccountId)?.name || '已刪除帳戶';
+    const target = state.accounts.find((account) => account.id === template.targetAccountId)?.name || '已刪除帳戶';
+    return `${typeLabel} · ${currency(template.amount)} · ${source} → ${target}`;
+  }
+  const account = state.accounts.find((item) => item.id === template.accountId)?.name || '已刪除帳戶';
+  const category = template.type === 'expense'
+    ? state.categories.flatMap((parent) => parent.children).find((child) => child.id === template.subcategoryId)?.name
+      || state.categories.find((parent) => parent.id === template.parentCategoryId)?.name || '已刪除類別'
+    : null;
+  return [typeLabel, currency(template.amount), account, category].filter(Boolean).join(' · ');
+}
+
+function templateCardMarkup(template) {
+  const icon = template.type === 'expense' ? '↗' : template.type === 'income' ? '↙' : '⇄';
+  const broken = !templateIsValid(template);
+  return `<button class="template-card template-card--${template.type} ${broken ? 'template-card--broken' : ''}" type="button" data-use-template="${template.id}" aria-label="${escapeHTML(template.name)}${broken ? '，帳戶或類別已刪除，請於設定處理此範本' : ''}">
+    <span class="template-card__icon" aria-hidden="true">${icon}</span>
+    <span class="template-card__name">${escapeHTML(template.name)}</span>
+    <strong class="template-card__amount">${currency(template.amount)}</strong>
+    ${broken ? '<small class="template-card__warning">帳戶或類別已刪除</small>' : ''}
+  </button>`;
+}
+
+function renderTemplates() {
+  $('#template-section').hidden = state.templates.length === 0;
+  if (!state.templates.length) return;
+  $('#template-list').innerHTML = state.templates.map(templateCardMarkup).join('');
+  $$('[data-use-template]').forEach((button) => button.addEventListener('click', () => useTemplate(button.dataset.useTemplate)));
+}
+
+async function useTemplate(id) {
+  const template = state.templates.find((item) => item.id === id);
+  if (!template) return;
+  if (!templateIsValid(template)) return showToast('這個範本使用的帳戶或類別已刪除，請到設定刪除或重新建立範本。');
+  try {
+    const input = { type: template.type, amount: template.amount, note: template.note, date: todayValue(), time: timeValue() };
+    if (template.type === 'transfer') Object.assign(input, { sourceAccountId: template.sourceAccountId, targetAccountId: template.targetAccountId });
+    else {
+      Object.assign(input, { accountId: template.accountId });
+      if (template.type === 'expense') Object.assign(input, { parentCategoryId: template.parentCategoryId, subcategoryId: template.subcategoryId });
+    }
+    await state.repository.createTransaction(input);
+    await loadData();
+    render();
+    showToast(`已新增：${template.name}`);
+  } catch (error) {
+    showToast(error.message || '套用範本時發生問題，請重試。');
+  }
+}
+
+function renderTemplateManager() {
+  const list = $('#template-manager-list');
+  if (!list) return;
+  list.innerHTML = state.templates.length
+    ? state.templates.map((template) => `<div class="manager-row"><span class="manager-row__text"><b>${escapeHTML(template.name)}</b><small>${escapeHTML(templateSummary(template))}</small></span><button class="manager-action manager-action--danger" type="button" data-delete-template="${template.id}">刪除</button></div>`).join('')
+    : '<p class="manager-empty">尚無範本。可在記帳面板填好交易後，點選「另存為範本」加入。</p>';
+  $$('[data-delete-template]').forEach((button) => button.addEventListener('click', () => deleteTemplate(button.dataset.deleteTemplate)));
+}
+
+async function deleteTemplate(id) {
+  const template = state.templates.find((item) => item.id === id);
+  if (!template || !window.confirm(`刪除範本「${template.name}」？`)) return;
+  state.templates = state.templates.filter((item) => item.id !== id);
+  await state.repository.setSetting('transaction-templates', state.templates);
+  render();
+  showToast('已刪除範本。');
+}
+
+function templateInputFromForm() {
+  const form = state.form;
+  const base = { type: form.type, amount: Number(form.amountText), note: form.note.trim() };
+  if (form.type === 'transfer') return { ...base, sourceAccountId: form.sourceAccountId, targetAccountId: form.targetAccountId };
+  return form.type === 'expense'
+    ? { ...base, accountId: form.accountId, parentCategoryId: form.parentId, subcategoryId: form.categoryId }
+    : { ...base, accountId: form.accountId };
+}
+
+function templateValidationError() {
+  const form = state.form;
+  if (!['expense', 'income', 'transfer'].includes(form.type)) return { message: '目前交易類型不支援存為範本。' };
+  if (!Number.isFinite(Number(form.amountText)) || Number(form.amountText) <= 0) return { message: '請先輸入大於 0 的金額。', selector: '.number-pad' };
+  if (form.type === 'transfer') {
+    if (!form.sourceAccountId || !form.targetAccountId) return { message: '請選擇來源與目的帳戶。', selector: '#transfer-account-section' };
+    if (form.sourceAccountId === form.targetAccountId) return { message: '來源與目的帳戶不可相同。', selector: '#transfer-account-section' };
+    return null;
+  }
+  if (!form.accountId) return { message: '請選擇帳戶。', selector: '#single-account-section' };
+  if (form.type === 'expense' && !form.parentId) return { message: '請選擇母類別。', selector: '#category-section' };
+  if (form.type === 'expense' && !selectedParent()?.allowsDirectExpense && !form.categoryId) return { message: '請選擇子類別。', selector: '#category-section' };
+  return null;
+}
+
+async function saveCurrentFormAsTemplate() {
+  const error = templateValidationError();
+  if (error) return showFormError(error.message, error);
+  const name = window.prompt('範本名稱（會顯示在主頁的常用範本列）', state.form.note || '');
+  if (name === null) return;
+  const trimmed = name.trim();
+  if (!trimmed) return showToast('請輸入範本名稱。');
+  const template = { id: crypto.randomUUID(), name: trimmed, ...templateInputFromForm() };
+  state.templates = [...state.templates, template];
+  await state.repository.setSetting('transaction-templates', state.templates);
+  render();
+  showToast(`已新增範本「${trimmed}」。`);
+}
+
 function renderSettings() {
   const parentName = (id) => state.categories.find((parent) => parent.id === id)?.name || '已刪除母類別';
   $('#account-manager-list').innerHTML = state.accounts.length
@@ -370,6 +494,7 @@ function renderSettings() {
     : '<p class="manager-empty">尚無子類別。</p>';
   $('#subcategory-parent-input').innerHTML = state.categories.map((parent) => `<option value="${parent.id}">${escapeHTML(parent.name)}</option>`).join('');
   renderClaimRatioPresetManager();
+  renderTemplateManager();
   bindManagerActions();
 }
 
@@ -633,6 +758,7 @@ function renderSheet() {
   $('#more-options').hidden = debtSettlementReadOnly;
   $('#save-transaction').hidden = debtSettlementReadOnly;
   $('#save-transaction').disabled = batchReimbursementReadOnly;
+  $('#save-as-template').hidden = !['expense', 'income', 'transfer'].includes(form.type) || reimbursementReadOnly || batchReimbursementSource || debtSettlementReadOnly || Boolean(form.debtDirection);
   $('#parent-options').innerHTML = state.categories.map((parent) => `<button type="button" class="parent-tab ${parent.id === form.parentId ? 'parent-tab--active' : ''}" data-parent-id="${parent.id}" aria-pressed="${parent.id === form.parentId}">${escapeHTML(parent.name)}</button>`).join('');
   const parent = selectedParent();
   $('#category-guidance').textContent = parent?.allowsDirectExpense ? '「其他」不需要子類別' : '先選母類別，再選子類別';
@@ -1084,7 +1210,7 @@ function renderQuery() {
   }
 }
 
-function render() { renderAccounts(); renderTransactions(); refreshQueryOptions(); renderQuery(); renderSettings(); }
+function render() { renderAccounts(); renderTemplates(); renderTransactions(); refreshQueryOptions(); renderQuery(); renderSettings(); }
 
 let toastTimer;
 function showToast(message) {
@@ -1421,6 +1547,7 @@ function initialiseEvents() {
     $('#debt-settlement-amount').value = String(calculateDebtRemaining(source, state.transactions));
     $('#debt-settlement-amount').focus();
   });
+  $('#save-as-template').addEventListener('click', saveCurrentFormAsTemplate);
   $('#delete-transaction').addEventListener('click', showDeleteConfirm);
   $('#cancel-delete').addEventListener('click', closeDeleteConfirm);
   $('#confirm-delete').addEventListener('click', deleteTransaction);
@@ -1522,6 +1649,8 @@ async function initialiseApp() {
     state.transactionDefaults = savedDefaults && typeof savedDefaults === 'object' ? savedDefaults : {};
     const savedClaimRatioPresets = await state.repository.getSetting('claim-ratio-presets');
     state.claimRatioPresets = normaliseClaimRatioPresets(Array.isArray(savedClaimRatioPresets) ? savedClaimRatioPresets : DEFAULT_CLAIM_RATIO_PRESETS);
+    const savedTemplates = await state.repository.getSetting('transaction-templates');
+    state.templates = Array.isArray(savedTemplates) ? savedTemplates : [];
     render();
   } catch (error) {
     $('#transaction-list').innerHTML = `<div class="empty-state">無法開啟本機資料：${escapeHTML(error.message || '請重新整理後再試。')}</div>`;

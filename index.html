@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/meowney-512.png" type="image/png" />
     <link rel="apple-touch-icon" href="icons/meowney-192.png" />
-    <link rel="stylesheet" href="styles.css?v=47" />
+    <link rel="stylesheet" href="styles.css?v=48" />
   </head>
   <body>
     <div class="app-shell">
@@ -26,6 +26,13 @@
               <span>點選帳戶切換紀錄</span>
             </div>
             <div id="account-list" class="account-list" aria-live="polite"></div>
+          </section>
+          <section id="template-section" class="templates-section" aria-labelledby="templates-title" hidden>
+            <div class="section-heading">
+              <h2 id="templates-title">常用範本</h2>
+              <span>點選直接新增交易</span>
+            </div>
+            <div id="template-list" class="template-list" aria-live="polite"></div>
           </section>
           <section id="debt-overview" class="debt-overview" aria-labelledby="debt-overview-title" hidden>
             <div class="section-heading"><h2 id="debt-overview-title">借貸</h2><span id="debt-overview-count"></span></div>
@@ -194,6 +201,13 @@
               </form>
             </div>
           </section>
+          <section class="settings-group" aria-labelledby="template-manager-title">
+            <div class="settings-group-heading">
+              <h2 id="template-manager-title">常用範本管理</h2>
+            </div>
+            <p class="manager-empty template-manager-hint">於記帳面板中填好支出／收入／轉帳後，點選「另存為範本」即可加入；範本會顯示在主頁的常用範本列，點一下直接新增交易。</p>
+            <div id="template-manager-list" class="manager-list"></div>
+          </section>
           <section class="settings-group" aria-labelledby="settings-file-title">
             <h2 id="settings-file-title">資料管理</h2>
             <div class="data-actions">
@@ -332,6 +346,7 @@
         </section>
 
         <p id="form-error" class="form-error" role="alert" hidden></p>
+        <button id="save-as-template" class="button button--secondary button--full save-as-template" type="button" hidden>另存為範本</button>
         <button id="delete-transaction" class="button button--danger button--full" type="button" hidden>刪除</button>
 
       </div>
@@ -380,6 +395,6 @@
     </section>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script type="module" src="app.js?v=47"></script>
+    <script type="module" src="app.js?v=48"></script>
   </body>
 </html>
