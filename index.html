@@ -3,14 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#111315" />
+    <meta name="theme-color" content="#08090a" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Meowney 記帳</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/meowney-512.png" type="image/png" />
     <link rel="apple-touch-icon" href="icons/meowney-192.png" />
-    <link rel="stylesheet" href="styles.css?v=49" />
+    <link rel="stylesheet" href="styles.css?v=52" />
   </head>
   <body>
     <div class="app-shell">
@@ -249,6 +249,10 @@
       <div class="sheet-body">
         <section id="debt-settlement-summary" class="debt-settlement-summary" hidden></section>
 
+        <label id="transaction-note-field" class="note-field"><span id="note-field-label">備註（選填）</span>
+          <textarea id="note-input" rows="2" placeholder="例如：午餐、薪水入帳"></textarea>
+        </label>
+
         <section id="category-section" class="entry-section category-section" aria-labelledby="parent-category-label">
           <div class="field-label">
             <h3 id="parent-category-label">選擇類別 <em>必填</em></h3>
@@ -270,8 +274,6 @@
           <div id="target-account-options" class="chip-row"></div>
         </section>
 
-        <section id="more-options" class="more-options" aria-label="交易詳細設定">
-          <div class="more-options__body">
         <section id="claim-ratio-section" class="entry-section reimbursement-section claim-ratio-section" aria-labelledby="claim-ratio-label" hidden>
           <div class="field-label">
             <h3 id="claim-ratio-label">請款比例</h3>
@@ -283,6 +285,17 @@
           </label>
           <p id="claim-ratio-preview" class="claim-ratio-preview"></p>
         </section>
+
+        <p id="claim-submitted-info" class="reimbursement-linked-info claim-submitted-info" hidden></p>
+
+        <section id="batch-reimbursement-details" class="batch-reimbursement-details" aria-labelledby="batch-reimbursement-items-title" hidden>
+          <p id="batch-reimbursement-note" class="batch-reimbursement-note" hidden></p>
+          <h3 id="batch-reimbursement-items-title">已報銷項目</h3>
+          <ul id="batch-reimbursement-items" class="batch-reimbursement-items"></ul>
+        </section>
+
+        <p id="reimbursement-linked-info" class="reimbursement-linked-info" hidden>此筆報銷與原支出保留關聯；可在這裡獨立修改報銷金額。</p>
+
         <section id="debt-section" class="entry-section reimbursement-section debt-section" aria-labelledby="debt-label" hidden>
           <div class="field-label"><h3 id="debt-label">借貸狀態</h3><span id="debt-guidance">這筆支出是否包含欠款</span></div>
           <div class="debt-direction" role="group" aria-label="借貸方向">
@@ -305,42 +318,6 @@
           <button id="save-debt-settlement" class="button button--secondary button--full" type="button">登記</button>
         </section>
 
-        <p id="claim-submitted-info" class="reimbursement-linked-info claim-submitted-info" hidden></p>
-
-        <section id="batch-reimbursement-details" class="batch-reimbursement-details" aria-labelledby="batch-reimbursement-items-title" hidden>
-          <p id="batch-reimbursement-note" class="batch-reimbursement-note" hidden></p>
-          <h3 id="batch-reimbursement-items-title">已報銷項目</h3>
-          <ul id="batch-reimbursement-items" class="batch-reimbursement-items"></ul>
-        </section>
-
-        <section id="reimbursement-section" class="entry-section reimbursement-section" aria-labelledby="reimbursement-label" hidden>
-          <div class="field-label">
-            <h3 id="reimbursement-label">報銷</h3>
-            <span>同帳戶入帳，金額可獨立設定</span>
-          </div>
-          <button id="reimbursement-toggle" class="reimbursement-toggle" type="button" aria-pressed="false">
-            <span><b>新增報銷</b><small id="reimbursement-toggle-status">不產生報銷收入</small></span><i aria-hidden="true">＋</i>
-          </button>
-          <label id="reimbursement-amount-field" class="note-field reimbursement-amount-field" hidden>報銷金額（必填）
-            <input id="reimbursement-amount-input" type="text" inputmode="none" autocomplete="off" placeholder="點擊輸入金額" readonly />
-          </label>
-          <label id="reimbursement-note-field" class="note-field reimbursement-note-field" hidden>報銷備註（選填）
-            <textarea id="reimbursement-note-input" rows="2" aria-required="false" placeholder="可以留空"></textarea>
-          </label>
-        </section>
-
-        <p id="reimbursement-linked-info" class="reimbursement-linked-info" hidden>此筆報銷與原支出保留關聯；可在這裡獨立修改報銷金額與備註。</p>
-
-        <label id="transaction-note-field" class="note-field"><span id="note-field-label">備註（選填）</span>
-          <textarea id="note-input" rows="2" placeholder="例如：午餐、薪水入帳"></textarea>
-        </label>
-
-        <div id="date-time-fields" class="date-time-fields">
-          <label>時間<input id="time-input" type="time" /></label>
-        </div>
-          </div>
-        </section>
-
         <p id="form-error" class="form-error" role="alert" hidden></p>
         <button id="save-as-template" class="button button--secondary button--full save-as-template" type="button" hidden>另存為範本</button>
         <button id="delete-transaction" class="button button--danger button--full" type="button" hidden>刪除</button>
@@ -352,14 +329,23 @@
             <output id="amount-expression" class="amount-expression" aria-live="polite">0</output>
             <output id="amount-display" class="amount-display">NT$ 0</output>
           </section>
-          <button id="planned-claim-toggle" class="quick-claim-toggle" type="button" aria-pressed="false"><span>預計請款</span><i aria-hidden="true">＋</i></button>
+          <button id="reimbursement-quick-toggle" class="quick-reimbursement-toggle" type="button" aria-pressed="false" hidden>報銷</button>
+          <button id="planned-claim-toggle" class="quick-claim-toggle" type="button" aria-pressed="false"><span>預計</span><span>請款</span></button>
+          <label id="date-quick-field" class="date-quick-field">
+            <span id="date-quick-year">2026</span><span id="date-quick-day">01/01</span>
+            <input id="date-input" type="date" aria-label="日期" />
+          </label>
         </div>
         <div id="calculator-error" class="calculator-error" role="status" hidden></div>
         <div id="number-pad" class="number-pad" aria-label="金額計算鍵盤">
-          <button type="button" data-key="7">7</button><button type="button" data-key="8">8</button><button type="button" data-key="9">9</button><button id="operator-cycle" type="button" class="operator-key" data-key="operator-cycle" aria-label="加入加號，重複點擊可切換運算符號">+</button><button type="button" class="utility-key" data-key="backspace" aria-label="刪除算式最後一個字元">⌫</button>
-          <button type="button" data-key="4">4</button><button type="button" data-key="5">5</button><button type="button" data-key="6">6</button><button id="transaction-type-cycle" class="type-cycle" type="button" aria-label="目前支出，點擊切換為收入">支出 ↻</button>
-          <button type="button" data-key="1">1</button><button type="button" data-key="2">2</button><button type="button" data-key="3">3</button><label class="quick-field quick-date-field"><span>日期</span><input id="date-input" type="date" /></label>
-          <button type="button" data-key=".">.</button><button type="button" data-key="0">0</button><button type="button" data-key="00">00</button><button id="save-transaction" class="quick-save" type="button">確定</button>
+          <div class="number-pad__top-row">
+            <button type="button" data-key="7">7</button><button type="button" data-key="8">8</button><button type="button" data-key="9">9</button>
+          </div>
+          <div class="number-pad__grid">
+            <button type="button" data-key="4">4</button><button type="button" data-key="5">5</button><button type="button" data-key="6">6</button><button id="operator-cycle" type="button" class="operator-key" data-key="operator-cycle" aria-label="加入加號，重複點擊可切換運算符號">+</button><button type="button" class="utility-key" data-key="backspace" aria-label="刪除算式最後一個字元">⌫</button>
+            <button type="button" data-key="1">1</button><button type="button" data-key="2">2</button><button type="button" data-key="3">3</button><button id="transaction-type-cycle" class="type-cycle" type="button" aria-label="目前支出，點擊切換為收入">支出 ↻</button>
+            <button type="button" data-key=".">.</button><button type="button" data-key="0">0</button><button type="button" data-key="00">00</button><button id="save-transaction" class="quick-save" type="button">確定</button>
+          </div>
         </div>
       </section>
     </section>
@@ -399,6 +385,6 @@
     </section>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script type="module" src="app.js?v=49"></script>
+    <script type="module" src="app.js?v=52"></script>
   </body>
 </html>

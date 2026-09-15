@@ -43,20 +43,22 @@ export async function runStage8Tests() {
     assert(html.includes('id="transaction-type-cycle"') && app.includes("'transfer', 'debt'") && html.includes('id="debt-section"') && html.includes('id="debt-status-details"') && html.includes('id="debt-overview"'), '借貸新增、結清或未結清摘要入口不完整。');
     assert(dataLayer.includes('createDebtSettlement') && dataLayer.includes('calculateDebtRemaining') && dataLayer.includes("transaction.type === 'debt-settlement'"), '借貸資料層缺少部分結清或餘額計算。');
     assert(queryLogic.includes("!['expense', 'income'].includes(transaction.type)") && queryLogic.includes("transaction.debtDirection === 'receivable'"), '借貸仍可能重複計入收入支出。');
-    assert(app.includes('renderDebtOverview()') && app.includes('saveDebtSettlement') && css.includes('.more-options'), '借貸摘要、結清操作或精簡表單未接上。');
+    assert(app.includes('renderDebtOverview()') && app.includes('saveDebtSettlement'), '借貸摘要或結清操作未接上。');
     assert(html.includes('id="fill-debt-remaining"') && app.includes('借入後帳戶增加') && app.includes('借出後帳戶減少'), '獨立借貸缺少明確現金流說明或快速結清。');
-    assert(!html.includes('<details id="more-options"') && !html.includes('<summary>更多設定'), '交易詳細設定仍需額外展開操作。');
+    assert(!html.includes('<details id="more-options"') && !html.includes('<summary>更多設定') && !html.includes('id="more-options"'), '交易詳細設定不應再有額外的「更多設定」包裹層，欠款狀態應直接置於表單底部。');
     assert(app.includes("transaction.type !== 'debt-settlement'") && app.includes('查看／刪除'), '結清紀錄仍可能重複顯示備註或缺少可理解的操作提示。');
-    assert(html.includes('id="debt-settlement-summary"') && app.includes("$('#number-pad').hidden = debtSettlementReadOnly") && app.includes("$('#more-options').hidden = debtSettlementReadOnly"), '結清明細仍顯示無法操作的交易輸入控制項。');
+    assert(html.includes('id="debt-settlement-summary"') && app.includes("$('#number-pad').hidden = debtSettlementReadOnly") && app.includes("$('#quick-entry-panel').hidden = debtSettlementReadOnly"), '結清明細仍顯示無法操作的交易輸入控制項。');
+    assert(html.indexOf('id="debt-section"') > html.indexOf('id="transaction-note-field"') && html.indexOf('id="debt-section"') > html.indexOf('id="category-section"'), '欠款狀態沒有移到表單底部，不常用功能仍排在前面。');
     assert(app.includes("'借入待還'") && app.includes("'借出待收'"), '獨立借貸在紀錄或摘要仍使用容易混淆的消費欠款名稱。');
   });
   await test('報銷、備註優先與日期層級符合交易介面規則', async () => {
     const [app, html, css] = await Promise.all([read('app.js'), read('index.html'), read('styles.css')]);
     assert(app.includes('createExpenseWithReimbursement') && app.includes('updateExpenseWithReimbursement') && app.includes("transaction.isReimbursement === true) return '報銷'"), '報銷新增或顯示流程缺失。');
-    assert(app.includes('usesNoteAsPrimaryTitle(transaction)') && app.includes('relativeDateLabel(date)') && app.includes('reimbursementNoteTouched') && app.includes('reimbursementAmountText') && app.includes('updateReimbursementTransaction') && app.includes('state.form.reimbursementNote = state.form.note'), '其他支出／收入／報銷備註優先、報銷獨立金額、預設備註或日期標示缺失。');
+    assert(app.includes('usesNoteAsPrimaryTitle(transaction)') && app.includes('relativeDateLabel(date)') && app.includes('reimbursementAmountText') && app.includes('updateReimbursementTransaction'), '其他支出／收入／報銷備註優先、報銷獨立金額或日期標示缺失。');
     assert(app.includes('transactionTitleMarkup(transaction)') && app.includes('class="transaction-kind"') && css.includes('.transaction-kind'), '報銷備註後的灰色標示缺失。');
-    assert(html.includes('id="reimbursement-toggle"') && html.includes('id="reimbursement-amount-input"') && html.includes('id="reimbursement-note-input"'), '報銷操作、金額或備註欄位不存在。');
-    assert(/\.transaction-row\s*\{[^}]*min-height:\s*74px/.test(css) && css.includes('.transaction-title--note') && css.includes('.date-group__header h3 small'), '交易列密度、備註或日期視覺階級未更新。');
+    assert(html.includes('id="reimbursement-quick-toggle"') && !html.includes('id="reimbursement-note-input"') && !html.includes('id="reimbursement-amount-input"'), '報銷應為快速切換按鈕，且不應再有獨立的報銷備註或金額欄位。');
+    assert(app.includes("note: state.form.note.trim() });") && !app.includes('reimbursementNote'), '報銷不應再能獨立輸入備註，應一律沿用原支出目前的備註。');
+    assert(/\.transaction-row\s*\{[^}]*min-height:\s*(\d+)px/.exec(css)?.[1] >= 44 && css.includes('.transaction-title--note') && css.includes('.date-group__header h3 small'), '交易列密度、備註或日期視覺階級未更新，或觸控區域小於無障礙最小尺寸。');
   });
   await test('預計請款可查詢，且報銷會取消原支出的狀態', async () => {
     const [app, html, dataLayer] = await Promise.all([read('app.js'), read('index.html'), read('data-layer.js')]);
@@ -129,12 +131,11 @@ export async function runStage8Tests() {
     assert(app.includes('useGrouping: false') && !html.includes('id="amount-label"'), '新增面板仍顯示金額分隔符或多餘的算式標籤。');
     assert(html.includes('id="amount-editor"') && html.includes('data-editor-key="AC"') && html.includes('data-editor-key="="') && app.includes('function calculatorKey') && app.includes('function confirmAmountEditor'), '報銷與借欠共用的隔離金額計算浮層不完整。');
     assert(app.includes("openAmountEditor('reimbursementAmountText'") && app.includes("openAmountEditor('debtAmountText'") && app.includes('state.amountEditor = { field, title, original, expression: original'), '額外金額欄位沒有使用獨立暫存狀態。');
-    assert(html.includes('id="reimbursement-note-input"') && html.includes('aria-required="false"') && !/id="reimbursement-note-input"[^>]*\srequired(?:\s|=|>)/.test(html), '報銷備註仍被標示為必填。');
     assert(app.includes('function clearFormValidation()') && app.includes('if (!form) return;\n  clearFormValidation();'), '重新顯示表單時沒有清除舊的紅框驗證狀態。');
     assert(app.includes('function appendAmount(key) {\n  clearFormValidation();'), '修正金額輸入後沒有立即清除目前的紅框驗證狀態。');
     assert(!app.includes('請在備註填寫借貸對象') && !dataLayer.includes('請在備註填寫欠款對象') && app.includes("'被欠款人／備註（選填）'") && app.includes("'欠款人／備註（選填）'"), '欠款人或被欠款人仍被當成必填欄位。');
     assert(css.includes('@keyframes amount-editor-panel-in') && css.includes('animation: amount-editor-panel-in'), '金額輸入浮層沒有彈出動畫。');
-    assert(/\.number-pad\s*\{[^}]*grid-template-columns:\s*repeat\(5, 1fr\)[^}]*grid-template-rows:\s*repeat\(4/.test(css) && html.includes('class="quick-field quick-date-field"'), '手機鍵盤與右側 2×4 功能區配置不完整。');
+    assert(/\.number-pad__grid\s*\{[^}]*grid-template-columns:\s*repeat\(5, 1fr\)/.test(css) && html.includes('id="date-quick-field"'), '手機鍵盤或日期快速按鈕配置不完整。');
     assert(/\.quick-entry-panel\s*\{[^}]*grid-template-rows:\s*52px minmax\(0, 1fr\)[^}]*overflow:\s*hidden/.test(css) && css.includes('.calculation-display .amount-expression') && css.includes('overflow-x: auto'), '獨立算式與結果顯示列或長算式水平查看功能不存在。');
     assert(!html.includes('id="quick-category-button"') && !html.includes('id="toggle-date-time"'), '介面仍保留重複分類或額外時間展開操作。');
     assert(html.indexOf('id="save-transaction"') > html.indexOf('id="quick-entry-panel"') && /\.quick-entry-panel\s*\{[^}]*max-height:\s*33\.333dvh/.test(css), '交易確認操作未固定在三分之一高度內。');

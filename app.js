@@ -1,7 +1,7 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=49';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=49';
-import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=49';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=49';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=52';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=52';
+import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=52';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=52';
 
 const DEFAULT_CLAIM_RATIO_PRESETS = [66, 100];
 
@@ -32,6 +32,7 @@ const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const currency = (amount) => `NT$ ${new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 2 }).format(amount)}`;
 const entryCurrency = (amount) => `NT$ ${new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 2, useGrouping: false }).format(amount)}`;
+const compactAmount = (amount) => new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 2, useGrouping: false }).format(amount);
 const signedCurrency = (amount) => `${amount >= 0 ? '+' : '-'}${currency(Math.abs(amount))}`;
 const localDateValue = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const todayValue = () => localDateValue();
@@ -551,7 +552,7 @@ function applyTypeDefaults(form, type) {
 }
 
 function createBlankForm() {
-  const form = { id: null, type: 'expense', amountText: '', amountExpression: '', accountId: null, parentId: null, categoryId: null, sourceAccountId: null, targetAccountId: null, note: '', debtDirection: null, debtAmountText: '', debtAmountTouched: false, settlementAccountId: null, isDebtSettlement: false, debtSourceId: null, isPlannedClaim: false, claimRatio: 100, reimbursementEnabled: false, reimbursementAmountText: '', reimbursementAmountTouched: false, reimbursementNote: '', reimbursementNoteTouched: false, isReimbursement: false, isBatchReimbursement: false, reimbursementExpenseIds: [], reimbursementBatchNote: '', reimbursementAmountsByExpenseId: null, date: todayValue(), time: timeValue() };
+  const form = { id: null, type: 'expense', amountText: '', amountExpression: '', accountId: null, parentId: null, categoryId: null, sourceAccountId: null, targetAccountId: null, note: '', debtDirection: null, debtAmountText: '', debtAmountTouched: false, settlementAccountId: null, isDebtSettlement: false, debtSourceId: null, isPlannedClaim: false, claimRatio: 100, reimbursementEnabled: false, reimbursementAmountText: '', reimbursementAmountTouched: false, isReimbursement: false, isBatchReimbursement: false, reimbursementExpenseIds: [], reimbursementBatchNote: '', reimbursementAmountsByExpenseId: null, date: todayValue(), time: timeValue() };
   return applyTypeDefaults(form, 'expense');
 }
 
@@ -565,6 +566,9 @@ async function rememberTransactionDefaults(form) {
 
 function formFromTransaction(transaction) {
   const reimbursement = transaction.reimbursementTransactionId ? state.transactions.find((item) => item.id === transaction.reimbursementTransactionId) : null;
+  const singleReimbursementSource = transaction.isReimbursement === true && transaction.isBatchReimbursement !== true
+    ? state.transactions.find((item) => item.id === transaction.reimbursementExpenseId)
+    : null;
   return {
     id: transaction.id,
     type: transaction.type,
@@ -575,7 +579,7 @@ function formFromTransaction(transaction) {
     categoryId: transaction.categoryId || null,
     sourceAccountId: transaction.sourceAccountId || null,
     targetAccountId: transaction.targetAccountId || null,
-    note: transaction.note || '',
+    note: singleReimbursementSource ? singleReimbursementSource.note || '' : transaction.note || '',
     debtDirection: transaction.debtDirection || null,
     debtAmountText: transaction.debtAmount ? String(transaction.debtAmount) : '',
     debtAmountTouched: Boolean(transaction.debtAmount),
@@ -590,8 +594,6 @@ function formFromTransaction(transaction) {
     reimbursementEnabled: Boolean(reimbursement),
     reimbursementAmountText: reimbursement ? String(reimbursement.amount) : '',
     reimbursementAmountTouched: Boolean(reimbursement),
-    reimbursementNote: reimbursement?.note || '',
-    reimbursementNoteTouched: Boolean(reimbursement),
     isReimbursement: transaction.isReimbursement === true,
     isBatchReimbursement: transaction.isBatchReimbursement === true || reimbursement?.isBatchReimbursement === true,
     reimbursementExpenseIds: Array.isArray(transaction.reimbursementExpenseIds) ? transaction.reimbursementExpenseIds : [],
@@ -706,7 +708,7 @@ function renderSheet() {
   $('#debt-settlement-summary').innerHTML = debtSettlementReadOnly ? `
     <p><span>借貸來源</span><strong>${escapeHTML(settlementSource?.note || '原借貸項目')}</strong></p>
     <p><span>使用帳戶</span><strong>${escapeHTML(currentTransaction?.accountName || '已刪除帳戶')}</strong></p>
-    <p><span>登記時間</span><strong>${escapeHTML(`${form.date.replaceAll('-', '/')} ${form.time}`)}</strong></p>` : '';
+    <p><span>登記日期</span><strong>${escapeHTML(form.date.replaceAll('-', '/'))}</strong></p>` : '';
   $('#category-section').hidden = form.type !== 'expense';
   $('#single-account-section').hidden = form.type === 'transfer' || reimbursementReadOnly || debtSettlementReadOnly;
   $('#transfer-account-section').hidden = form.type !== 'transfer';
@@ -719,7 +721,6 @@ function renderSheet() {
   $('#batch-reimbursement-note').hidden = !batchReimbursementReadOnly || !form.reimbursementBatchNote;
   $('#batch-reimbursement-note').textContent = form.reimbursementBatchNote ? `共用備註：${form.reimbursementBatchNote}` : '';
   $('#batch-reimbursement-items').innerHTML = batchReimbursementReadOnly ? batchReimbursementItemsMarkup(form) : '';
-  $('#reimbursement-section').hidden = form.type !== 'expense' || reimbursementReadOnly || batchReimbursementSource || Boolean(form.debtDirection);
   $('#debt-section').hidden = !['expense', 'debt'].includes(form.type) || reimbursementReadOnly || batchReimbursementSource;
   const hasDebtSettlements = Boolean(form.id && state.transactions.some((item) => item.type === 'debt-settlement' && item.debtSourceId === form.id));
   $('#debt-label').textContent = form.type === 'debt' ? '借貸方向' : '欠款狀態';
@@ -749,15 +750,15 @@ function renderSheet() {
   $('#planned-claim-toggle').classList.toggle('quick-claim-toggle--active', form.isPlannedClaim);
   renderClaimRatioSection();
   $('#reimbursement-linked-info').hidden = !reimbursementReadOnly || batchReimbursementReadOnly;
-  $('#reimbursement-toggle').setAttribute('aria-pressed', String(form.reimbursementEnabled));
-  $('#reimbursement-toggle').classList.toggle('reimbursement-toggle--active', form.reimbursementEnabled);
-  $('#reimbursement-toggle-status').textContent = form.reimbursementEnabled ? '會新增一筆可自訂金額的收入' : '不產生報銷收入';
-  $('#reimbursement-amount-field').hidden = !form.reimbursementEnabled || form.type !== 'expense' || reimbursementReadOnly;
-  $('#reimbursement-amount-input').value = form.reimbursementAmountText;
-  $('#reimbursement-note-field').hidden = !form.reimbursementEnabled || form.type !== 'expense' || reimbursementReadOnly;
-  $('#reimbursement-note-input').value = form.reimbursementNote;
+  const reimbursementQuickVisible = form.type === 'expense' && !reimbursementReadOnly && !batchReimbursementSource && !Boolean(form.debtDirection);
+  $('#reimbursement-quick-toggle').hidden = !reimbursementQuickVisible;
+  $('#reimbursement-quick-toggle').setAttribute('aria-pressed', String(form.reimbursementEnabled));
+  $('#reimbursement-quick-toggle').classList.toggle('quick-reimbursement-toggle--active', form.reimbursementEnabled);
+  $('#reimbursement-quick-toggle').innerHTML = form.reimbursementEnabled
+    ? `<span>報銷</span><span>+${compactAmount(Number(form.reimbursementAmountText) || 0)}</span>`
+    : '<span>報銷</span>';
   $('#note-field-label').textContent = reimbursementReadOnly
-    ? '報銷備註（選填）'
+    ? '原支出備註'
     : form.debtDirection === 'payable'
       ? '被欠款人／備註（選填）'
       : form.debtDirection === 'receivable'
@@ -765,12 +766,13 @@ function renderSheet() {
         : '備註（選填）';
   $('#transaction-note-field').hidden = batchReimbursementReadOnly;
   $('#note-input').value = form.note;
-  $('#note-input').disabled = batchReimbursementReadOnly || debtSettlementReadOnly;
+  $('#note-input').disabled = batchReimbursementReadOnly || debtSettlementReadOnly || reimbursementReadOnly;
   $('#date-input').value = form.date;
-  $('#time-input').value = form.time;
-  $('#date-time-fields').hidden = reimbursementReadOnly || debtSettlementReadOnly;
+  $('#date-quick-year').textContent = form.date.slice(0, 4);
+  $('#date-quick-day').textContent = form.date.slice(5).replace('-', '/');
+  $('#date-quick-field').classList.toggle('date-quick-field--disabled', reimbursementReadOnly || debtSettlementReadOnly);
+  $('#date-input').disabled = reimbursementReadOnly || debtSettlementReadOnly;
   $$('.number-pad button[data-key]').forEach((button) => { button.disabled = batchReimbursementReadOnly || debtSettlementReadOnly; });
-  $('#more-options').hidden = debtSettlementReadOnly;
   $('#save-transaction').hidden = debtSettlementReadOnly;
   $('#save-transaction').disabled = batchReimbursementReadOnly;
   $('#save-as-template').hidden = !['expense', 'income', 'transfer'].includes(form.type) || reimbursementReadOnly || batchReimbursementSource || debtSettlementReadOnly || Boolean(form.debtDirection);
@@ -902,7 +904,7 @@ function appendAmount(key) {
   $('#calculator-error').textContent = result.error || '';
   if (state.form.reimbursementEnabled && !state.form.reimbursementAmountTouched) {
     state.form.reimbursementAmountText = state.form.amountText;
-    $('#reimbursement-amount-input').value = state.form.reimbursementAmountText;
+    $('#reimbursement-quick-toggle').innerHTML = `<span>報銷</span><span>+${compactAmount(Number(state.form.reimbursementAmountText) || 0)}</span>`;
   }
   if (state.form.type === 'expense' && state.form.debtDirection && !state.form.debtAmountTouched) {
     state.form.debtAmountText = state.form.amountText;
@@ -988,9 +990,9 @@ function validationError() {
   const form = state.form;
   if (form.isReimbursement && form.isBatchReimbursement) return { message: '合併報銷的金額與項目清單由已包含的支出自動產生。', selector: '#batch-reimbursement-details' };
   if (!Number.isFinite(Number(form.amountText)) || Number(form.amountText) <= 0) return { message: '請輸入大於 0 的金額。', selector: '.number-pad', focusSelector: '.number-pad button' };
-  if (form.type === 'expense' && form.reimbursementEnabled && (!Number.isFinite(Number(form.reimbursementAmountText)) || Number(form.reimbursementAmountText) <= 0)) return { message: '請輸入大於 0 的報銷金額。', selector: '#reimbursement-amount-field', focusSelector: '#reimbursement-amount-input' };
+  if (form.type === 'expense' && form.reimbursementEnabled && (!Number.isFinite(Number(form.reimbursementAmountText)) || Number(form.reimbursementAmountText) <= 0)) return { message: '請輸入大於 0 的報銷金額。', selector: '#reimbursement-quick-toggle', focusSelector: '#reimbursement-quick-toggle' };
   if (form.type === 'expense' && form.debtDirection && (!Number.isFinite(Number(form.debtAmountText)) || Number(form.debtAmountText) <= 0 || Number(form.debtAmountText) > Number(form.amountText))) return { message: '欠款金額必須大於 0，且不可超過支出金額。', selector: '#debt-amount-field', focusSelector: '#debt-amount-input' };
-  if (!form.date || !form.time) return { message: '請選擇完整的日期與時間。', selector: '#date-time-fields', focusSelector: '#time-input' };
+  if (!form.date) return { message: '請選擇日期。', selector: '#date-quick-field', focusSelector: '#date-input' };
   if (form.type === 'transfer') {
     if (!form.sourceAccountId || !form.targetAccountId) return { message: '請選擇來源帳戶與目的帳戶。', selector: '#transfer-account-section', focusSelector: '#transfer-account-section button:not([disabled])' };
     if (form.sourceAccountId === form.targetAccountId) return { message: '轉帳的來源與目的帳戶不可相同。', selector: '#transfer-account-section', focusSelector: '#transfer-account-section button:not([disabled])' };
@@ -1037,9 +1039,9 @@ async function saveTransaction() {
     const input = transactionInputFromForm();
     const createdWithReimbursement = !state.editingId && state.form.type === 'expense' && state.form.reimbursementEnabled;
     if (state.editingId && state.form.isReimbursement) await state.repository.updateReimbursementTransaction(state.editingId, { amount: Number(state.form.amountText), note: state.form.note.trim() });
-    else if (state.editingId && state.form.type === 'expense') await state.repository.updateExpenseWithReimbursement(state.editingId, input, { enabled: state.form.reimbursementEnabled, amount: Number(state.form.reimbursementAmountText), note: state.form.reimbursementNote.trim() });
+    else if (state.editingId && state.form.type === 'expense') await state.repository.updateExpenseWithReimbursement(state.editingId, input, { enabled: state.form.reimbursementEnabled, amount: Number(state.form.reimbursementAmountText), note: state.form.note.trim() });
     else if (state.editingId) await state.repository.updateTransaction(state.editingId, input);
-    else if (state.form.type === 'expense' && state.form.reimbursementEnabled) await state.repository.createExpenseWithReimbursement(input, { amount: Number(state.form.reimbursementAmountText), note: state.form.reimbursementNote.trim() });
+    else if (state.form.type === 'expense' && state.form.reimbursementEnabled) await state.repository.createExpenseWithReimbursement(input, { amount: Number(state.form.reimbursementAmountText), note: state.form.note.trim() });
     else await state.repository.createTransaction(input);
     await rememberTransactionDefaults(state.form);
     const edited = Boolean(state.editingId);
@@ -1514,18 +1516,14 @@ function initialiseEvents() {
   $('#note-input').addEventListener('input', (event) => {
     clearFormValidation();
     state.form.note = event.target.value;
-    if (state.form.reimbursementEnabled && !state.form.reimbursementNoteTouched) {
-      state.form.reimbursementNote = state.form.note;
-      $('#reimbursement-note-input').value = state.form.reimbursementNote;
-    }
   });
-  $('#reimbursement-toggle').addEventListener('click', () => {
+  $('#reimbursement-quick-toggle').addEventListener('click', () => {
     if (!state.form || state.form.type !== 'expense' || state.form.isReimbursement) return;
     const enabling = !state.form.reimbursementEnabled;
     state.form.reimbursementEnabled = enabling;
     if (enabling && !state.form.reimbursementAmountTouched) state.form.reimbursementAmountText = state.form.amountText;
-    if (enabling && !state.form.reimbursementNoteTouched) state.form.reimbursementNote = state.form.note;
     renderSheet();
+    if (enabling) openAmountEditor('reimbursementAmountText', '報銷金額');
   });
   $('#planned-claim-toggle').addEventListener('click', () => {
     if (!state.form || state.form.type !== 'expense' || state.form.isReimbursement || state.form.claimBatchId) return;
@@ -1546,7 +1544,6 @@ function initialiseEvents() {
     $('#claim-ratio-options [data-claim-ratio-custom]')?.classList.toggle('chip--active', !state.claimRatioPresets.includes(ratio));
     $('#claim-ratio-preview').textContent = claimRatioPreviewText(Number(state.form.amountText || 0), ratio);
   });
-  $('#reimbursement-amount-input').addEventListener('click', () => openAmountEditor('reimbursementAmountText', '報銷金額'));
   $('#debt-amount-input').addEventListener('click', () => openAmountEditor('debtAmountText', state.form?.debtDirection === 'receivable' ? '別人欠我的金額' : '我欠別人的金額'));
   $('#close-amount-editor').addEventListener('click', closeAmountEditor);
   $('#open-templates').addEventListener('click', openTemplatePicker);
@@ -1554,9 +1551,12 @@ function initialiseEvents() {
   $('#template-picker').addEventListener('click', (event) => { if (event.target.id === 'template-picker') closeTemplatePicker(); });
   $('#confirm-amount-editor').addEventListener('click', confirmAmountEditor);
   $$('[data-editor-key]').forEach((button) => button.addEventListener('click', () => appendEditorAmount(button.dataset.editorKey)));
-  $('#reimbursement-note-input').addEventListener('input', (event) => { clearFormValidation(); state.form.reimbursementNote = event.target.value; state.form.reimbursementNoteTouched = true; });
-  $('#date-input').addEventListener('input', (event) => { clearFormValidation(); state.form.date = event.target.value; });
-  $('#time-input').addEventListener('input', (event) => { clearFormValidation(); state.form.time = event.target.value; });
+  $('#date-input').addEventListener('input', (event) => {
+    clearFormValidation();
+    state.form.date = event.target.value;
+    $('#date-quick-year').textContent = state.form.date.slice(0, 4);
+    $('#date-quick-day').textContent = state.form.date.slice(5).replace('-', '/');
+  });
   $('#save-transaction').addEventListener('click', saveTransaction);
   $('#save-debt-settlement').addEventListener('click', saveDebtSettlement);
   $('#fill-debt-remaining').addEventListener('click', () => {
