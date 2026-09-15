@@ -1,7 +1,7 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=48';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=48';
-import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=48';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=48';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=49';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=49';
+import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=49';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=49';
 
 const DEFAULT_CLAIM_RATIO_PRESETS = [66, 100];
 
@@ -386,22 +386,36 @@ function templateSummary(template) {
   return [typeLabel, currency(template.amount), account, category].filter(Boolean).join(' · ');
 }
 
-function templateCardMarkup(template) {
-  const icon = template.type === 'expense' ? '↗' : template.type === 'income' ? '↙' : '⇄';
+function templatePickerRowMarkup(template) {
   const broken = !templateIsValid(template);
-  return `<button class="template-card template-card--${template.type} ${broken ? 'template-card--broken' : ''}" type="button" data-use-template="${template.id}" aria-label="${escapeHTML(template.name)}${broken ? '，帳戶或類別已刪除，請於設定處理此範本' : ''}">
-    <span class="template-card__icon" aria-hidden="true">${icon}</span>
-    <span class="template-card__name">${escapeHTML(template.name)}</span>
-    <strong class="template-card__amount">${currency(template.amount)}</strong>
-    ${broken ? '<small class="template-card__warning">帳戶或類別已刪除</small>' : ''}
+  return `<button class="template-picker-row template-picker-row--${template.type} ${broken ? 'template-picker-row--broken' : ''}" type="button" data-use-template="${template.id}" aria-label="${escapeHTML(template.name)}${broken ? '，帳戶或類別已刪除，請於設定處理此範本' : ''}">
+    <span><b>${escapeHTML(template.name)}</b>${broken ? '<small>帳戶或類別已刪除</small>' : ''}</span>
+    <strong>${currency(template.amount)}</strong>
   </button>`;
 }
 
 function renderTemplates() {
-  $('#template-section').hidden = state.templates.length === 0;
-  if (!state.templates.length) return;
-  $('#template-list').innerHTML = state.templates.map(templateCardMarkup).join('');
+  $('#open-templates').hidden = state.templates.length === 0;
+  $('#template-entry-count').textContent = state.templates.length ? ` · ${state.templates.length} 個` : '';
+  if (!$('#template-picker').hidden) renderTemplatePickerList();
+}
+
+function renderTemplatePickerList() {
+  $('#template-picker-list').innerHTML = state.templates.length
+    ? state.templates.map(templatePickerRowMarkup).join('')
+    : '<p class="manager-empty">尚無範本。</p>';
   $$('[data-use-template]').forEach((button) => button.addEventListener('click', () => useTemplate(button.dataset.useTemplate)));
+}
+
+function openTemplatePicker() {
+  renderTemplatePickerList();
+  $('#template-picker').hidden = false;
+  setTimeout(() => $('#close-template-picker').focus(), 0);
+}
+
+function closeTemplatePicker() {
+  $('#template-picker').hidden = true;
+  $('#open-templates')?.focus();
 }
 
 async function useTemplate(id) {
@@ -417,6 +431,7 @@ async function useTemplate(id) {
     }
     await state.repository.createTransaction(input);
     await loadData();
+    closeTemplatePicker();
     render();
     showToast(`已新增：${template.name}`);
   } catch (error) {
@@ -1534,6 +1549,9 @@ function initialiseEvents() {
   $('#reimbursement-amount-input').addEventListener('click', () => openAmountEditor('reimbursementAmountText', '報銷金額'));
   $('#debt-amount-input').addEventListener('click', () => openAmountEditor('debtAmountText', state.form?.debtDirection === 'receivable' ? '別人欠我的金額' : '我欠別人的金額'));
   $('#close-amount-editor').addEventListener('click', closeAmountEditor);
+  $('#open-templates').addEventListener('click', openTemplatePicker);
+  $('#close-template-picker').addEventListener('click', closeTemplatePicker);
+  $('#template-picker').addEventListener('click', (event) => { if (event.target.id === 'template-picker') closeTemplatePicker(); });
   $('#confirm-amount-editor').addEventListener('click', confirmAmountEditor);
   $$('[data-editor-key]').forEach((button) => button.addEventListener('click', () => appendEditorAmount(button.dataset.editorKey)));
   $('#reimbursement-note-input').addEventListener('input', (event) => { clearFormValidation(); state.form.reimbursementNote = event.target.value; state.form.reimbursementNoteTouched = true; });
@@ -1625,6 +1643,11 @@ function initialiseEvents() {
     if (!$('#amount-editor').hidden) {
       if (event.key === 'Escape') closeAmountEditor();
       else trapFocus(event, $('#amount-editor'));
+      return;
+    }
+    if (!$('#template-picker').hidden) {
+      if (event.key === 'Escape') closeTemplatePicker();
+      else trapFocus(event, $('#template-picker'));
       return;
     }
     if (!$('#confirm-dialog').hidden) {

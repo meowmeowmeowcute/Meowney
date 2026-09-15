@@ -111,8 +111,9 @@ export async function runStage8Tests() {
   });
   await test('常用範本可從記帳面板另存、於主頁一鍵套用，且管理與刪除集中在設定頁', async () => {
     const [app, html] = await Promise.all([read('app.js'), read('index.html')]);
-    assert(html.includes('id="template-section"') && /id="template-section"[^>]*\bhidden\b/.test(html), '常用範本區塊應在沒有範本時預設隱藏。');
-    assert(app.includes('$(\'#template-section\').hidden = state.templates.length === 0'), '常用範本區塊沒有依範本數量動態顯示或隱藏。');
+    assert(html.includes('id="open-templates"') && /id="open-templates"[^>]*\bhidden\b/.test(html), '常用範本入口應在沒有範本時預設隱藏，且不應佔用主頁版面。');
+    assert(app.includes('$(\'#open-templates\').hidden = state.templates.length === 0'), '常用範本入口沒有依範本數量動態顯示或隱藏。');
+    assert(html.includes('id="template-picker"') && html.includes('id="template-picker-list"') && app.includes('function openTemplatePicker') && app.includes('function closeTemplatePicker'), '常用範本沒有以可點開的清單呈現。');
     assert(html.includes('id="save-as-template"') && app.includes('async function saveCurrentFormAsTemplate') && app.includes("state.repository.setSetting('transaction-templates', state.templates)"), '記帳面板缺少另存為範本的入口或沒有持久化。');
     assert(app.includes('async function useTemplate') && app.includes('date: todayValue(), time: timeValue()') && app.includes('await state.repository.createTransaction(input)'), '套用範本沒有以目前日期時間直接新增交易。');
     assert(app.includes('function templateIsValid') && app.includes('帳戶或類別已刪除'), '範本沒有處理帳戶或類別已被刪除的情況。');

@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/meowney-512.png" type="image/png" />
     <link rel="apple-touch-icon" href="icons/meowney-192.png" />
-    <link rel="stylesheet" href="styles.css?v=48" />
+    <link rel="stylesheet" href="styles.css?v=49" />
   </head>
   <body>
     <div class="app-shell">
@@ -27,13 +27,9 @@
             </div>
             <div id="account-list" class="account-list" aria-live="polite"></div>
           </section>
-          <section id="template-section" class="templates-section" aria-labelledby="templates-title" hidden>
-            <div class="section-heading">
-              <h2 id="templates-title">常用範本</h2>
-              <span>點選直接新增交易</span>
-            </div>
-            <div id="template-list" class="template-list" aria-live="polite"></div>
-          </section>
+          <button id="open-templates" class="template-entry" type="button" aria-haspopup="dialog" hidden>
+            <span>常用範本<small id="template-entry-count"></small></span><i aria-hidden="true">›</i>
+          </button>
           <section id="debt-overview" class="debt-overview" aria-labelledby="debt-overview-title" hidden>
             <div class="section-heading"><h2 id="debt-overview-title">借貸</h2><span id="debt-overview-count"></span></div>
             <div class="debt-summary-grid"><article><span>我還欠</span><strong id="payable-total">NT$ 0</strong></article><article><span>待收回</span><strong id="receivable-total">NT$ 0</strong></article></div>
@@ -368,6 +364,14 @@
       </section>
     </section>
 
+    <section id="template-picker" class="template-picker" role="dialog" aria-modal="true" aria-labelledby="template-picker-title" hidden>
+      <div class="template-picker__panel">
+        <header class="template-picker__header"><h2 id="template-picker-title">常用範本</h2><button id="close-template-picker" type="button" aria-label="關閉常用範本清單">×</button></header>
+        <p class="template-picker__hint">點選一筆即直接以目前時間新增交易。</p>
+        <div id="template-picker-list" class="template-picker__list" aria-live="polite"></div>
+      </div>
+    </section>
+
     <section id="amount-editor" class="amount-editor" role="dialog" aria-modal="true" aria-labelledby="amount-editor-title" hidden>
       <div class="amount-editor__panel">
         <header class="amount-editor__header"><h2 id="amount-editor-title">輸入金額</h2><button id="close-amount-editor" type="button" aria-label="取消金額修改">×</button></header>
@@ -395,6 +399,6 @@
     </section>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script type="module" src="app.js?v=48"></script>
+    <script type="module" src="app.js?v=49"></script>
   </body>
 </html>
