@@ -1,7 +1,7 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=57';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=57';
-import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=57';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=57';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=58';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=58';
+import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=58';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=58';
 
 const DEFAULT_CLAIM_RATIO_PRESETS = [66, 100];
 
@@ -712,7 +712,7 @@ function renderSheet() {
   $('#category-section').hidden = form.type !== 'expense';
   $('#single-account-section').hidden = form.type === 'transfer' || reimbursementReadOnly || debtSettlementReadOnly;
   $('#transfer-account-section').hidden = form.type !== 'transfer';
-  $('#planned-claim-toggle').hidden = form.type !== 'expense' || reimbursementReadOnly || batchReimbursementSource || Boolean(form.debtDirection);
+  $('#planned-claim-toggle').classList.toggle('quick-claim-toggle--hidden', form.type !== 'expense' || reimbursementReadOnly || batchReimbursementSource || Boolean(form.debtDirection));
   $('#claim-submitted-info').hidden = !batchReimbursementSource && !batchReimbursementReadOnly;
   $('#claim-submitted-info').textContent = batchReimbursementSource
     ? '此筆已包含在合併報銷中；修改金額或備註後，合併報銷的金額與項目清單會同步更新。'
