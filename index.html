@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/meowney-512.png" type="image/png" />
     <link rel="apple-touch-icon" href="icons/meowney-192.png" />
-    <link rel="stylesheet" href="styles.css?v=53" />
+    <link rel="stylesheet" href="styles.css?v=54" />
   </head>
   <body>
     <div class="app-shell">
@@ -249,10 +249,6 @@
       <div class="sheet-body">
         <section id="debt-settlement-summary" class="debt-settlement-summary" hidden></section>
 
-        <label id="transaction-note-field" class="note-field"><span id="note-field-label">備註（選填）</span>
-          <textarea id="note-input" rows="2" placeholder="例如：午餐、薪水入帳"></textarea>
-        </label>
-
         <section id="category-section" class="entry-section category-section" aria-labelledby="parent-category-label">
           <div class="field-label">
             <h3 id="parent-category-label">選擇類別 <em>必填</em></h3>
@@ -295,6 +291,10 @@
         </section>
 
         <p id="reimbursement-linked-info" class="reimbursement-linked-info" hidden>此筆報銷與原支出保留關聯；可在這裡獨立修改報銷金額。</p>
+
+        <label id="transaction-note-field" class="note-field"><span id="note-field-label">備註（選填）</span>
+          <textarea id="note-input" rows="2" placeholder="例如：午餐、薪水入帳"></textarea>
+        </label>
 
         <section id="debt-section" class="entry-section reimbursement-section debt-section" aria-labelledby="debt-label" hidden>
           <div class="field-label"><h3 id="debt-label">借貸狀態</h3><span id="debt-guidance">這筆支出是否包含欠款</span></div>
@@ -379,6 +379,6 @@
     </section>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script type="module" src="app.js?v=53"></script>
+    <script type="module" src="app.js?v=54"></script>
   </body>
 </html>
