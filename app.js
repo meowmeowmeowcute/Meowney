@@ -1,7 +1,7 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=58';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=58';
-import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=58';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=58';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=59';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=59';
+import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=59';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=59';
 
 const DEFAULT_CLAIM_RATIO_PRESETS = [66, 100];
 

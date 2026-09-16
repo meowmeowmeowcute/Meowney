@@ -20,7 +20,7 @@ export async function runStage6Tests() {
   });
   await test('應用殼層完整快取所有執行期本機資源', async () => {
     const worker = await read('service-worker.js');
-    for (const asset of ['./index.html', './styles.css?v=58', './app.js?v=58', './calculator.js?v=58', './data-layer.js?v=58', './query-logic.js?v=58', './backup-format.js?v=58', './manifest.webmanifest', './icons/meowney-192.png', './icons/meowney-512.png']) {
+    for (const asset of ['./index.html', './styles.css?v=59', './app.js?v=59', './calculator.js?v=59', './data-layer.js?v=59', './query-logic.js?v=59', './backup-format.js?v=59', './manifest.webmanifest', './icons/meowney-192.png', './icons/meowney-512.png']) {
       assert(worker.includes(`'${asset}'`), `快取清單缺少 ${asset}。`);
     }
     assert(worker.includes("new Request(asset, { cache: 'reload' })") && worker.includes("cache.put('./index.html', response.clone())"), '更新時沒有重新取得完整殼層或更新頁面快取。');
@@ -40,12 +40,12 @@ export async function runStage6Tests() {
     for (const icon of manifest.icons) {
       assert(new URL(icon.src, manifestUrl).pathname.startsWith('/Meowney/icons/'), `圖示 ${icon.src} 未保留 GitHub Pages 子路徑。`);
     }
-    assert(html.includes('href="manifest.webmanifest"') && html.includes('href="styles.css?v=58"') && html.includes('src="app.js?v=58"'), '頁面資源不是相對路徑或未使用一致的版本。');
+    assert(html.includes('href="manifest.webmanifest"') && html.includes('href="styles.css?v=59"') && html.includes('src="app.js?v=59"'), '頁面資源不是相對路徑或未使用一致的版本。');
     assert(new URL('./service-worker.js', 'https://meowmeowmeowcute.github.io/Meowney/app.js').pathname === '/Meowney/service-worker.js', 'Service Worker 註冊路徑會離開 GitHub Pages 子路徑。');
-    for (const asset of ['./', './index.html', './styles.css?v=58', './app.js?v=58', './calculator.js?v=58', './data-layer.js?v=58', './query-logic.js?v=58', './backup-format.js?v=58', './manifest.webmanifest', './icons/meowney-192.png', './icons/meowney-512.png']) {
+    for (const asset of ['./', './index.html', './styles.css?v=59', './app.js?v=59', './calculator.js?v=59', './data-layer.js?v=59', './query-logic.js?v=59', './backup-format.js?v=59', './manifest.webmanifest', './icons/meowney-192.png', './icons/meowney-512.png']) {
       assert(worker.includes(`'${asset}'`) && new URL(asset, manifestUrl).pathname.startsWith('/Meowney/'), `離線快取資源 ${asset} 未保留 GitHub Pages 子路徑。`);
     }
-    assert(worker.includes("meowney-app-shell-v58") && app.includes("./data-layer.js?v=58") && app.includes("./query-logic.js?v=58") && app.includes("./backup-format.js?v=58") && app.includes("./calculator.js?v=58"), '頁面、模組與離線快取版本不一致，可能混用新舊程式。');
+    assert(worker.includes("meowney-app-shell-v59") && app.includes("./data-layer.js?v=59") && app.includes("./query-logic.js?v=59") && app.includes("./backup-format.js?v=59") && app.includes("./calculator.js?v=59"), '頁面、模組與離線快取版本不一致，可能混用新舊程式。');
     assert(app.includes("new URL('./service-worker.js', import.meta.url)"), 'Service Worker 未使用模組相對路徑。');
   });
   return results;
