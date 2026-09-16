@@ -1,7 +1,7 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=54';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=54';
-import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=54';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=54';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=55';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=55';
+import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=55';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=55';
 
 const DEFAULT_CLAIM_RATIO_PRESETS = [66, 100];
 
@@ -902,10 +902,6 @@ function appendAmount(key) {
   updateOperatorCycle(result.expression);
   $('#calculator-error').hidden = !result.error;
   $('#calculator-error').textContent = result.error || '';
-  if (state.form.reimbursementEnabled && !state.form.reimbursementAmountTouched) {
-    state.form.reimbursementAmountText = state.form.amountText;
-    $('#reimbursement-quick-toggle').innerHTML = `<span>報銷</span><span>+${compactAmount(Number(state.form.reimbursementAmountText) || 0)}</span>`;
-  }
   if (state.form.type === 'expense' && state.form.debtDirection && !state.form.debtAmountTouched) {
     state.form.debtAmountText = state.form.amountText;
     $('#debt-amount-input').value = state.form.debtAmountText;
@@ -980,7 +976,7 @@ function confirmAmountEditor() {
     return renderAmountEditor();
   }
   state.form[editor.field] = String(calculation.value);
-  if (editor.field === 'reimbursementAmountText') state.form.reimbursementAmountTouched = true;
+  if (editor.field === 'reimbursementAmountText') { state.form.reimbursementAmountTouched = true; state.form.reimbursementEnabled = true; }
   if (editor.field === 'debtAmountText') state.form.debtAmountTouched = true;
   closeAmountEditor();
   renderSheet();
@@ -1519,11 +1515,8 @@ function initialiseEvents() {
   });
   $('#reimbursement-quick-toggle').addEventListener('click', () => {
     if (!state.form || state.form.type !== 'expense' || state.form.isReimbursement) return;
-    const enabling = !state.form.reimbursementEnabled;
-    state.form.reimbursementEnabled = enabling;
-    if (enabling && !state.form.reimbursementAmountTouched) state.form.reimbursementAmountText = state.form.amountText;
-    renderSheet();
-    if (enabling) openAmountEditor('reimbursementAmountText', '報銷金額');
+    if (!state.form.reimbursementAmountTouched) state.form.reimbursementAmountText = state.form.amountText;
+    openAmountEditor('reimbursementAmountText', '報銷金額');
   });
   $('#planned-claim-toggle').addEventListener('click', () => {
     if (!state.form || state.form.type !== 'expense' || state.form.isReimbursement || state.form.claimBatchId) return;
