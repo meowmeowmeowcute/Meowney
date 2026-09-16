@@ -267,36 +267,34 @@ textarea { padding: 11px; resize: vertical; }
 .form-error { margin: 12px 0 0; color: #ffc0c0; font-size: 13px; }
 .validation-target--invalid { border-radius: 15px; outline: 2px solid #df7777; outline-offset: 5px; }
 .quick-entry-panel { position: relative; z-index: 3; display: grid; max-height: 33.333dvh; min-height: 0; flex: 0 0 33.333dvh; grid-template-rows: 52px minmax(0, 1fr); gap: 4px; overflow: hidden; padding: 5px 8px calc(5px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: #0d0f10; box-shadow: 0 -8px 18px rgba(0, 0, 0, .28); }
-.calculation-display { display: grid; min-width: 0; min-height: 0; grid-template-columns: minmax(0, 1fr) 52px 46px 44px; gap: 4px; overflow: hidden; }
+.calculation-display { display: grid; min-width: 0; min-height: 0; grid-template-columns: minmax(0, 1fr) 86px; gap: 5px; overflow: hidden; }
 .type-cycle, .quick-save { min-width: 0; min-height: 0; height: 100%; padding: 0 3px; border: 0; border-radius: 9px; font-size: 13px; font-weight: 850; }
 .type-cycle { background: #2c2f30; color: var(--text); }
 .quick-save { background: var(--accent); color: var(--accent-ink); }
 .calculation-display .amount-section { min-height: 0; grid-template-rows: 18px minmax(28px, 1fr); gap: 0; overflow: hidden; padding: 1px 3px; }
-.calculation-display .amount-expression { grid-column: 1 / -1; grid-row: 1; min-width: 0; min-height: 0; overflow-x: auto; overflow-y: hidden; color: #cbd5d1; font-size: clamp(12px, 3.6vw, 16px); line-height: 18px; scrollbar-width: none; white-space: nowrap; }
+.calculation-display .amount-expression { grid-column: 1 / -1; grid-row: 1; min-width: 0; min-height: 0; overflow-x: auto; overflow-y: hidden; color: #cbd5d1; font-size: clamp(13px, 4vw, 16px); line-height: 18px; scrollbar-width: none; white-space: nowrap; }
 .calculation-display .amount-expression::-webkit-scrollbar { display: none; }
-.calculation-display .amount-display { grid-column: 1 / -1; grid-row: 2; max-width: 100%; overflow-x: auto; overflow-y: hidden; font-size: clamp(19px, 6vw, 30px); line-height: 30px; scrollbar-width: none; white-space: nowrap; }
+.calculation-display .amount-display { grid-column: 1 / -1; grid-row: 2; max-width: 100%; overflow-x: auto; overflow-y: hidden; font-size: clamp(22px, 7vw, 30px); line-height: 30px; scrollbar-width: none; white-space: nowrap; }
 .calculation-display .amount-display::-webkit-scrollbar { display: none; }
-.quick-claim-toggle, .quick-reimbursement-toggle, .date-quick-field { display: grid; min-width: 0; min-height: 0; place-content: center; gap: 1px; padding: 2px 3px; border: 1px solid #282c2d; border-radius: 9px; background: #272c2e; color: var(--text); font-size: 10px; font-weight: 800; text-align: center; }
-.quick-claim-toggle span, .quick-reimbursement-toggle span, .date-quick-field span { display: block; overflow: hidden; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
+.quick-reimbursement-toggle { display: grid; min-width: 0; min-height: 0; place-content: center; gap: 2px; padding: 2px 4px; border: 1px solid #282c2d; border-radius: 9px; background: #191c1d; color: #8b9491; font-size: 10px; font-weight: 800; text-align: center; }
+.quick-reimbursement-toggle span { display: block; overflow: hidden; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
+.quick-reimbursement-toggle--active { border-color: var(--accent); background: #1e493a; color: #d6ffeb; }
+.quick-claim-toggle, .date-quick-field { display: grid; min-width: 0; min-height: 0; place-content: center; gap: 1px; padding: 2px 3px; border: 1px solid #282c2d; border-radius: 8px; background: #191c1d; color: var(--text); font-size: 12px; font-weight: 800; text-align: center; }
+.quick-claim-toggle span, .date-quick-field span { display: block; overflow: hidden; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
 .quick-claim-toggle { border-color: #6b5730; background: #332b1d; color: #f0d49a; }
 .quick-claim-toggle--active { border-color: #e8bd6a; background: #59451f; color: #fff0c9; }
-.quick-reimbursement-toggle { color: #8b9491; }
-.quick-reimbursement-toggle--active { border-color: var(--accent); background: #1e493a; color: #d6ffeb; }
 .date-quick-field { position: relative; cursor: pointer; }
-.date-quick-field span:first-child { color: var(--muted); font-size: 9px; font-weight: 700; }
+.date-quick-field span:first-child { color: var(--muted); font-size: 10px; font-weight: 700; }
 .date-quick-field input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; }
 .date-quick-field--disabled { opacity: .5; pointer-events: none; }
 .calculator-error { position: absolute; z-index: 2; right: 62px; bottom: calc(5px + env(safe-area-inset-bottom)); left: 8px; overflow: hidden; margin: 0; padding: 2px 4px; border-radius: 5px; background: rgba(78, 24, 28, .94); color: #ffcece; font-size: 10px; line-height: 14px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
-.number-pad { display: grid; min-height: 0; grid-template-rows: minmax(24px, 1fr) minmax(0, 3fr); gap: 4px; margin: 0; overflow: hidden; }
-.number-pad__top-row { display: grid; min-height: 0; grid-template-columns: repeat(3, 1fr); gap: 4px; }
-.number-pad__grid { display: grid; min-height: 0; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(3, minmax(24px, 1fr)); gap: 4px; }
+.number-pad { display: grid; min-height: 0; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(4, minmax(24px, 1fr)); gap: 4px; margin: 0; overflow: hidden; }
 .number-pad button { min-width: 0; height: auto; min-height: 0; border: 1px solid #282c2d; border-radius: 8px; background: #232627; color: var(--text); font-size: clamp(14px, 4.8vw, 19px); font-variant-numeric: tabular-nums; }
-.number-pad__top-row button { font-size: clamp(16px, 5.4vw, 21px); }
 .number-pad .operator-key { background: #2b4039; color: #9ef0c6; font-weight: 850; }
 .number-pad .utility-key { background: #291f1f; color: #ffc1c1; font-size: 15px; font-weight: 800; }
 .number-pad button:active { background: #51585a; }
-.number-pad__grid .quick-save { grid-column: span 2; background: var(--accent); color: var(--accent-ink); }
-.number-pad__grid .type-cycle { grid-column: span 2; background: #2c2f30; color: var(--text); }
+.number-pad .quick-save { grid-column: span 2; background: var(--accent); color: var(--accent-ink); }
+.number-pad .type-cycle { grid-column: span 2; background: #2c2f30; color: var(--text); }
 .amount-editor { position: fixed; z-index: 18; inset: 0; display: grid; align-items: end; padding: 12px max(8px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); background: rgba(0, 0, 0, .62); animation: amount-editor-backdrop-in .18s ease-out; }
 .amount-editor__panel { display: grid; width: min(100%, 520px); max-height: min(72dvh, 520px); grid-template-rows: auto 72px minmax(188px, 1fr); gap: 7px; margin: 0 auto; padding: 10px; border: 1px solid #46504d; border-radius: 18px; background: #0d0f10; box-shadow: 0 18px 54px rgba(0, 0, 0, .55); animation: amount-editor-panel-in .24s cubic-bezier(.2, .8, .2, 1); transform-origin: bottom center; }
 @keyframes amount-editor-backdrop-in { from { background: rgba(0, 0, 0, 0); } }
@@ -355,11 +353,12 @@ textarea { padding: 11px; resize: vertical; }
   .calculation-display .amount-section { grid-template-rows: 15px minmax(24px, 1fr); padding-block: 0; }
   .calculation-display .amount-expression { font-size: clamp(11px, 3.6vw, 14px); line-height: 15px; }
   .calculation-display .amount-display { font-size: clamp(19px, 6vw, 24px); line-height: 26px; }
-  .number-pad, .number-pad__top-row, .number-pad__grid { gap: 3px; }
+  .number-pad { gap: 3px; }
   .number-pad button { border-radius: 6px; font-size: clamp(12px, 4.2vw, 16px); }
   .number-pad .utility-key { font-size: 12px; }
-  .calculation-display { grid-template-columns: minmax(0, 1fr) 46px 42px 40px; gap: 3px; }
-  .quick-claim-toggle, .quick-reimbursement-toggle, .date-quick-field { padding: 1px 2px; font-size: 9px; }
+  .calculation-display { grid-template-columns: minmax(0, 1fr) 74px; gap: 3px; }
+  .quick-reimbursement-toggle { padding: 1px 2px; font-size: 9px; }
+  .quick-claim-toggle, .date-quick-field { padding: 1px 2px; font-size: 10px; }
   .amount-editor__panel { max-height: calc(100dvh - 16px); grid-template-rows: auto 58px minmax(160px, 1fr); gap: 5px; padding: 8px; }
   .amount-editor__display { grid-template-rows: 20px 34px; }
   #amount-editor-expression { font-size: 14px; line-height: 20px; }

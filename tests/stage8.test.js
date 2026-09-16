@@ -135,7 +135,7 @@ export async function runStage8Tests() {
     assert(app.includes('function appendAmount(key) {\n  clearFormValidation();'), '修正金額輸入後沒有立即清除目前的紅框驗證狀態。');
     assert(!app.includes('請在備註填寫借貸對象') && !dataLayer.includes('請在備註填寫欠款對象') && app.includes("'被欠款人／備註（選填）'") && app.includes("'欠款人／備註（選填）'"), '欠款人或被欠款人仍被當成必填欄位。');
     assert(css.includes('@keyframes amount-editor-panel-in') && css.includes('animation: amount-editor-panel-in'), '金額輸入浮層沒有彈出動畫。');
-    assert(/\.number-pad__grid\s*\{[^}]*grid-template-columns:\s*repeat\(5, 1fr\)/.test(css) && html.includes('id="date-quick-field"'), '手機鍵盤或日期快速按鈕配置不完整。');
+    assert(/\.number-pad\s*\{[^}]*grid-template-columns:\s*repeat\(5, 1fr\)[^}]*grid-template-rows:\s*repeat\(4/.test(css) && html.includes('id="date-quick-field"'), '手機鍵盤或日期快速按鈕配置不完整。');
     assert(/\.quick-entry-panel\s*\{[^}]*grid-template-rows:\s*52px minmax\(0, 1fr\)[^}]*overflow:\s*hidden/.test(css) && css.includes('.calculation-display .amount-expression') && css.includes('overflow-x: auto'), '獨立算式與結果顯示列或長算式水平查看功能不存在。');
     assert(!html.includes('id="quick-category-button"') && !html.includes('id="toggle-date-time"'), '介面仍保留重複分類或額外時間展開操作。');
     assert(html.indexOf('id="save-transaction"') > html.indexOf('id="quick-entry-panel"') && /\.quick-entry-panel\s*\{[^}]*max-height:\s*33\.333dvh/.test(css), '交易確認操作未固定在三分之一高度內。');
