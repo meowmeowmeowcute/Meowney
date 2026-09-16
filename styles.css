@@ -193,7 +193,7 @@ textarea { padding: 11px; resize: vertical; }
 .field-label h3 { margin: 0; }
 .field-label > span { color: var(--muted); font-size: 11px; text-align: right; }
 .parent-tabs { display: flex; gap: 2px; overflow-x: auto; margin: 0 -18px 13px; padding: 0 18px 7px; border-bottom: 1px solid var(--line); scrollbar-width: none; }
-.parent-tab { position: relative; flex: 0 0 auto; min-height: 42px; padding: 8px 14px; border: 0; background: transparent; color: var(--muted); font-size: 15px; font-weight: 750; }
+.parent-tab { position: relative; flex: 0 0 auto; min-height: 42px; padding: 8px 12px; border: 0; background: transparent; color: var(--muted); font-size: 13px; font-weight: 750; }
 .parent-tab--active { color: var(--text); }
 .parent-tab--active::after { position: absolute; right: 13px; bottom: -8px; left: 13px; height: 3px; border-radius: 4px; background: var(--select); content: ''; }
 .category-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
@@ -279,7 +279,7 @@ textarea { padding: 11px; resize: vertical; }
 .quick-reimbursement-toggle { display: grid; min-width: 0; min-height: 0; place-content: center; gap: 2px; padding: 2px 4px; border: 1px solid #282c2d; border-radius: 9px; background: #191c1d; color: #8b9491; font-size: 10px; font-weight: 800; text-align: center; }
 .quick-reimbursement-toggle span { display: block; overflow: hidden; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
 .quick-reimbursement-toggle--active { border-color: var(--accent); background: #1e493a; color: #d6ffeb; }
-.quick-claim-toggle, .date-quick-field { display: grid; min-width: 0; min-height: 0; place-content: center; gap: 1px; padding: 2px 3px; border: 1px solid #282c2d; border-radius: 8px; background: #191c1d; color: var(--text); font-size: 10px; font-weight: 800; text-align: center; }
+.quick-claim-toggle, .date-quick-field { display: grid; min-width: 0; min-height: 0; place-content: center; gap: 1px; padding: 2px 3px; border: 1px solid #282c2d; border-radius: 8px; background: #191c1d; color: var(--text); font-size: 9px; font-weight: 800; text-align: center; }
 .quick-claim-toggle span, .date-quick-field span { display: block; overflow: hidden; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
 .quick-claim-toggle { border-color: #6b5730; background: #332b1d; color: #f0d49a; }
 .quick-claim-toggle--active { border-color: #e8bd6a; background: #59451f; color: #fff0c9; }
@@ -358,7 +358,7 @@ textarea { padding: 11px; resize: vertical; }
   .number-pad .utility-key { font-size: 12px; }
   .calculation-display { grid-template-columns: minmax(0, 1fr) calc((100% - 12px) / 5); gap: 3px; }
   .quick-reimbursement-toggle { padding: 1px 2px; font-size: 9px; }
-  .quick-claim-toggle, .date-quick-field { padding: 1px 2px; font-size: 9px; }
+  .quick-claim-toggle, .date-quick-field { padding: 1px 2px; font-size: 8px; }
   .amount-editor__panel { max-height: calc(100dvh - 16px); grid-template-rows: auto 58px minmax(160px, 1fr); gap: 5px; padding: 8px; }
   .amount-editor__display { grid-template-rows: 20px 34px; }
   #amount-editor-expression { font-size: 14px; line-height: 20px; }
