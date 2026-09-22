@@ -33,6 +33,31 @@ export async function runStage4Tests() {
       assert((await repository.listSubcategories()).find((item) => item.id === meal.id).parentCategoryId === shopping.id, '子類別沒有移動。');
     });
 
+    await test('重新命名帳戶、母類別或子類別會同步更新仍關聯的歷史交易顯示名稱', async () => {
+      const renameAccount = await repository.createAccount({ name: '舊帳戶名', initialBalance: 300 });
+      const otherAccount = await repository.createAccount({ name: '轉帳對象', initialBalance: 0 });
+      const renameParent = await repository.createParentCategory({ name: '三餐' });
+      const renameChild = await repository.createSubcategory({ parentCategoryId: renameParent.id, name: '早餐' });
+      const expense = await repository.createTransaction({ type: 'expense', amount: 60, accountId: renameAccount.id, parentCategoryId: renameParent.id, subcategoryId: renameChild.id, date: '2026-09-22', time: '08:00' });
+      const transfer = await repository.createTransaction({ type: 'transfer', amount: 20, sourceAccountId: renameAccount.id, targetAccountId: otherAccount.id, date: '2026-09-22', time: '08:10' });
+
+      await repository.updateAccount(renameAccount.id, { name: '新帳戶名' });
+      await repository.updateParentCategory(renameParent.id, { name: '食物' });
+      await repository.updateSubcategory(renameChild.id, { name: '早午餐' });
+
+      const transactions = await repository.listTransactions();
+      const savedExpense = transactions.find((item) => item.id === expense.id);
+      const savedTransfer = transactions.find((item) => item.id === transfer.id);
+      assert(savedExpense.accountNameSnapshot === '新帳戶名', '重新命名帳戶後，既有支出交易的帳戶快照沒有同步更新。');
+      assert(savedExpense.parentCategoryNameSnapshot === '食物', '重新命名母類別後，既有交易的母類別快照沒有同步更新。');
+      assert(savedExpense.subcategoryNameSnapshot === '早午餐', '重新命名子類別後，既有交易的子類別快照沒有同步更新。');
+      assert(savedTransfer.sourceAccountNameSnapshot === '新帳戶名', '重新命名帳戶後，既有轉帳交易的來源帳戶快照沒有同步更新。');
+
+      await repository.deleteAccount(renameAccount.id);
+      const afterDelete = (await repository.listTransactions()).find((item) => item.id === expense.id);
+      assert(afterDelete.accountNameSnapshot === '新帳戶名', '刪除帳戶後，歷史交易應保留刪除當下的最後名稱快照，不應再改變。');
+    });
+
     await test('刪除帳戶或子類別不會刪除歷史交易', async () => {
       const transaction = await repository.createTransaction({ type: 'expense', amount: 80, accountId: cash.id, parentCategoryId: shopping.id, subcategoryId: meal.id, date: '2026-08-23', time: '13:00' });
       await repository.deleteAccount(cash.id);

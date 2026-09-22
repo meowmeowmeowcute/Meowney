@@ -3,7 +3,7 @@
  * 所有餘額皆由帳戶初始餘額與交易重新計算，不會寫入可失真的快取餘額。
  */
 
-import { calculateClaimAmount } from './calculator.js?v=59';
+import { calculateClaimAmount } from './calculator.js?v=60';
 
 export const DATABASE_NAME = 'meowney-ledger';
 export const DATABASE_VERSION = 1;
@@ -719,6 +719,41 @@ export function calculateDebtRemaining(source, transactions) {
   return Math.max(Number(source.debtAmount) - settled, 0);
 }
 
+// 重新命名帳戶／母類別／子類別時，同步更新仍關聯到該筆資料的交易快照名稱，
+// 讓「改名」與「刪除保留舊名」明確區分：只要關聯還在，顯示名稱就跟著最新名稱走；
+// 關聯斷了（該筆資料被刪除）才會維持刪除當下的最後快照，作為歷史紀錄。
+async function syncAccountNameSnapshots(transactionsStore, account) {
+  const timestamp = now();
+  const allTransactions = await requestAsPromise(transactionsStore.getAll());
+  for (const transaction of allTransactions) {
+    const patch = {};
+    if (transaction.accountId === account.id && transaction.accountNameSnapshot !== account.name) patch.accountNameSnapshot = account.name;
+    if (transaction.sourceAccountId === account.id && transaction.sourceAccountNameSnapshot !== account.name) patch.sourceAccountNameSnapshot = account.name;
+    if (transaction.targetAccountId === account.id && transaction.targetAccountNameSnapshot !== account.name) patch.targetAccountNameSnapshot = account.name;
+    if (Object.keys(patch).length) await requestAsPromise(transactionsStore.put({ ...transaction, ...patch, updatedAt: timestamp }));
+  }
+}
+
+async function syncParentCategoryNameSnapshots(transactionsStore, parentCategory) {
+  const timestamp = now();
+  const allTransactions = await requestAsPromise(transactionsStore.getAll());
+  for (const transaction of allTransactions) {
+    if (transaction.parentCategoryId === parentCategory.id && transaction.parentCategoryNameSnapshot !== parentCategory.name) {
+      await requestAsPromise(transactionsStore.put({ ...transaction, parentCategoryNameSnapshot: parentCategory.name, updatedAt: timestamp }));
+    }
+  }
+}
+
+async function syncSubcategoryNameSnapshots(transactionsStore, subcategory) {
+  const timestamp = now();
+  const allTransactions = await requestAsPromise(transactionsStore.getAll());
+  for (const transaction of allTransactions) {
+    if (transaction.subcategoryId === subcategory.id && transaction.subcategoryNameSnapshot !== subcategory.name) {
+      await requestAsPromise(transactionsStore.put({ ...transaction, subcategoryNameSnapshot: subcategory.name, updatedAt: timestamp }));
+    }
+  }
+}
+
 export class MeowneyRepository {
   static async open(options = {}) {
     return new MeowneyRepository(await openDatabase(options.databaseName));
@@ -781,10 +816,11 @@ export class MeowneyRepository {
   }
 
   async updateAccount(id, input) {
-    return this.write(STORE.accounts, async ({ accounts }) => {
+    return this.write([STORE.accounts, STORE.transactions], async ({ accounts, transactions }) => {
       const existing = await mustGet(accounts, id, '帳戶');
       const account = normaliseAccount({ ...existing, ...input, id }, existing);
       await requestAsPromise(accounts.put(account));
+      if (account.name !== existing.name) await syncAccountNameSnapshots(transactions, account);
       return account;
     });
   }
@@ -799,10 +835,11 @@ export class MeowneyRepository {
   }
 
   async updateParentCategory(id, input) {
-    return this.write(STORE.parentCategories, async ({ parentCategories }) => {
+    return this.write([STORE.parentCategories, STORE.transactions], async ({ parentCategories, transactions }) => {
       const existing = await mustGet(parentCategories, id, '母類別');
       const category = normaliseParentCategory({ ...existing, ...input, id }, existing);
       await requestAsPromise(parentCategories.put(category));
+      if (category.name !== existing.name) await syncParentCategoryNameSnapshots(transactions, category);
       return category;
     });
   }
@@ -825,11 +862,12 @@ export class MeowneyRepository {
   }
 
   async updateSubcategory(id, input) {
-    return this.write([STORE.parentCategories, STORE.subcategories], async ({ parentCategories, subcategories }) => {
+    return this.write([STORE.parentCategories, STORE.subcategories, STORE.transactions], async ({ parentCategories, subcategories, transactions }) => {
       const existing = await mustGet(subcategories, id, '子類別');
       const category = normaliseSubcategory({ ...existing, ...input, id }, existing);
       await mustGet(parentCategories, category.parentCategoryId, '母類別');
       await requestAsPromise(subcategories.put(category));
+      if (category.name !== existing.name) await syncSubcategoryNameSnapshots(transactions, category);
       return category;
     });
   }
