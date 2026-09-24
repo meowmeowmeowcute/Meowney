@@ -3,7 +3,7 @@
  * 所有餘額皆由帳戶初始餘額與交易重新計算，不會寫入可失真的快取餘額。
  */
 
-import { calculateClaimAmount } from './calculator.js?v=61';
+import { calculateClaimAmount } from './calculator.js?v=62';
 
 export const DATABASE_NAME = 'meowney-ledger';
 export const DATABASE_VERSION = 1;
@@ -424,8 +424,13 @@ function batchReimbursementAmounts(expenses) {
 
 function buildBatchReimbursementTransaction(expenses, note, input = {}, existing = null) {
   if (!Array.isArray(expenses) || !expenses.length) throw new DataValidationError('請至少選擇一筆未請款支出。');
-  const accountId = expenses[0].accountId;
-  if (expenses.some((expense) => expense.accountId !== accountId)) throw new DataValidationError('合併報銷只能包含同一帳戶的支出，請先用帳戶篩選。');
+  let accountId = input.accountId;
+  let accountNameSnapshot = input.accountNameSnapshot;
+  if (!accountId) {
+    accountId = expenses[0].accountId;
+    if (expenses.some((expense) => expense.accountId !== accountId)) throw new DataValidationError('合併報銷只能包含同一帳戶的支出，請先在設定中指定合併報銷收款帳戶，或改用相同帳戶的支出。');
+    accountNameSnapshot = expenses[0].accountNameSnapshot;
+  }
   const { amountsByExpenseId, total } = batchReimbursementAmounts(expenses);
   if (total <= 0) throw new DataValidationError('所選支出依請款比例計算後的合計金額為 0，請先調整請款比例。');
   const transaction = transactionBase({
@@ -435,12 +440,11 @@ function buildBatchReimbursementTransaction(expenses, note, input = {}, existing
     time: input.time ?? existing?.time,
     note: batchReimbursementNote(expenses, note),
   }, 'income', existing);
-  const account = expenses[0];
   return {
     ...transaction,
-    accountId: account.accountId,
-    accountNameSnapshot: account.accountNameSnapshot,
-    accountIds: [account.accountId],
+    accountId,
+    accountNameSnapshot,
+    accountIds: [accountId],
     parentCategoryId: null,
     parentCategoryNameSnapshot: null,
     subcategoryId: null,
@@ -961,7 +965,7 @@ export class MeowneyRepository {
         for (const sourceId of reimbursementSourceIds(existingReimbursement)) {
           sources.push(sourceId === existing.id ? linkedExpense : await mustGet(stores.transactions, sourceId, '合併報銷原支出'));
         }
-        const updatedReimbursement = buildBatchReimbursementTransaction(sources, existingReimbursement.reimbursementBatchNote || '', { date: existingReimbursement.date, time: existingReimbursement.time }, existingReimbursement);
+        const updatedReimbursement = buildBatchReimbursementTransaction(sources, existingReimbursement.reimbursementBatchNote || '', { date: existingReimbursement.date, time: existingReimbursement.time, accountId: existingReimbursement.accountId, accountNameSnapshot: existingReimbursement.accountNameSnapshot }, existingReimbursement);
         await requestAsPromise(stores.transactions.put(linkedExpense));
         await requestAsPromise(stores.transactions.put(updatedReimbursement));
         return { expense: linkedExpense, reimbursement: updatedReimbursement };
@@ -982,12 +986,12 @@ export class MeowneyRepository {
     });
   }
 
-  async createBatchReimbursement(transactionIds, note = '', date, time) {
+  async createBatchReimbursement(transactionIds, note = '', date, time, accountId = null) {
     if (!Array.isArray(transactionIds) || !transactionIds.length || new Set(transactionIds).size !== transactionIds.length) {
       throw new DataValidationError('請至少選擇一筆未請款支出。');
     }
     if (typeof note !== 'string') throw new DataValidationError('報銷備註格式錯誤。');
-    return this.write(STORE.transactions, async ({ transactions }) => {
+    return this.write([STORE.transactions, STORE.accounts], async ({ transactions, accounts }) => {
       const selected = [];
       for (const id of transactionIds) {
         const transaction = await mustGet(transactions, id, '預計請款支出');
@@ -997,7 +1001,12 @@ export class MeowneyRepository {
         if (Number(transaction.claimRatio ?? 100) <= 0) throw new DataValidationError('請款比例為 0% 的項目無法加入合併請款，請先取消勾選或調整比例。');
         selected.push(transaction);
       }
-      const reimbursement = buildBatchReimbursementTransaction(selected, note, { date, time });
+      const targetAccount = accountId ? await mustGet(accounts, accountId, '合併報銷收款帳戶') : null;
+      const reimbursement = buildBatchReimbursementTransaction(selected, note, {
+        date,
+        time,
+        ...(targetAccount ? { accountId: targetAccount.id, accountNameSnapshot: targetAccount.name } : {}),
+      });
       for (const transaction of selected) {
         await requestAsPromise(transactions.put({ ...transaction, isPlannedClaim: false, claimBatchId: null, claimNote: null, reimbursementTransactionId: reimbursement.id, updatedAt: now() }));
       }
@@ -1066,7 +1075,7 @@ export class MeowneyRepository {
             } else {
               const remainingExpenses = [];
               for (const sourceId of remainingIds) remainingExpenses.push(await mustGet(transactions, sourceId, '合併報銷原支出'));
-              const updatedReimbursement = buildBatchReimbursementTransaction(remainingExpenses, reimbursement.reimbursementBatchNote || '', { date: reimbursement.date, time: reimbursement.time }, reimbursement);
+              const updatedReimbursement = buildBatchReimbursementTransaction(remainingExpenses, reimbursement.reimbursementBatchNote || '', { date: reimbursement.date, time: reimbursement.time, accountId: reimbursement.accountId, accountNameSnapshot: reimbursement.accountNameSnapshot }, reimbursement);
               await requestAsPromise(transactions.put(updatedReimbursement));
             }
           } else {

@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/meowney-512.png" type="image/png" />
     <link rel="apple-touch-icon" href="icons/meowney-192.png" />
-    <link rel="stylesheet" href="styles.css?v=61" />
+    <link rel="stylesheet" href="styles.css?v=62" />
   </head>
   <body>
     <div class="app-shell">
@@ -197,6 +197,15 @@
               </form>
             </div>
           </section>
+          <section class="settings-group" aria-labelledby="batch-reimbursement-account-title">
+            <div class="settings-group-heading">
+              <h2 id="batch-reimbursement-account-title">合併報銷收款帳戶</h2>
+            </div>
+            <p class="manager-empty batch-reimbursement-account-hint">指定帳戶後，建立合併報銷時可勾選不同帳戶的支出一起合併，報銷收入固定存入這個帳戶；不指定則維持原規則（勾選的支出須同一帳戶，收入存入該帳戶）。</p>
+            <label class="batch-reimbursement-account-field">收款帳戶
+              <select id="batch-reimbursement-account-select"></select>
+            </label>
+          </section>
           <section class="settings-group" aria-labelledby="template-manager-title">
             <div class="settings-group-heading">
               <h2 id="template-manager-title">常用範本管理</h2>
@@ -379,6 +388,6 @@
     </section>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script type="module" src="app.js?v=61"></script>
+    <script type="module" src="app.js?v=62"></script>
   </body>
 </html>

@@ -78,7 +78,7 @@ export async function runStage8Tests() {
     assert(app.includes('claimAccountGroups(transactions)') && app.includes('data-select-claim-account') && app.includes('claim-selectable--blocked'), '候選項目沒有依帳戶分組或防止跨帳戶誤選。');
     assert(html.includes('id="claim-selected-count"') && html.includes('id="claim-selected-account"') && html.includes('id="claim-selected-total"'), '選取筆數、帳戶或合計金額摘要不完整。');
     assert(html.includes('id="clear-claim-selection"') && html.includes('id="cancel-batch-reimbursement"') && app.includes('clearClaimSelection') && app.includes('cancelBatchReimbursement'), '清除選取或取消整個流程的入口不完整。');
-    assert(app.includes('window.confirm(`將「${accountName}」的 ${selected.length} 筆支出') && app.includes("openSheet(batch.reimbursement.id)"), '建立前確認或建立後直接核對明細的流程不存在。');
+    assert(app.includes('window.confirm(`將 ${selected.length} 筆支出合併為一筆') && app.includes("openSheet(batch.reimbursement.id)"), '建立前確認或建立後直接核對明細的流程不存在。');
     assert(css.includes('.claim-selection-summary') && /\.text-action--compact\s*\{[^}]*min-height:\s*44px/.test(css) && /\.claim-account-group__heading \.button\s*\{[^}]*min-height:\s*44px/.test(css) && /\.claim-selection-controls \.button\s*\{[^}]*min-height:\s*44px/.test(css), '合併報銷摘要、入口、帳戶分組或手機觸控區樣式不完整。');
     assert(requirements.includes('合併報銷操作流程改善') && uxNotes.includes('合併報銷流程改善'), '合併報銷改善規格或紀錄未更新。');
   });

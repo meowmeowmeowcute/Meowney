@@ -99,6 +99,23 @@ export async function runStage2Tests() {
       await repository.createBatchReimbursement([secondExpense.id], '恢復後續測試基準', '2026-08-24', '09:25');
     });
 
+    await test('可指定合併報銷收款帳戶，允許合併不同帳戶的預計請款支出', async () => {
+      const targetAccount = await repository.createAccount({ name: '郵局', initialBalance: 0 });
+      const cashItem = await repository.createTransaction({ type: 'expense', amount: 50, accountId: cash.id, parentCategoryId: other.id, note: '現金待報銷B', isPlannedClaim: true, date: '2026-09-05', time: '09:00' });
+      const bankItem = await repository.createTransaction({ type: 'expense', amount: 30, accountId: bank.id, parentCategoryId: food.id, subcategoryId: meal.id, note: '銀行待報銷B', isPlannedClaim: true, date: '2026-09-05', time: '09:05' });
+      const balancesBefore = calculateAccountBalances(await repository.listAccounts(), await repository.listTransactions());
+      const batch = await repository.createBatchReimbursement([cashItem.id, bankItem.id], '跨帳戶測試', '2026-09-05', '09:10', targetAccount.id);
+      assert(batch.reimbursement.accountId === targetAccount.id && batch.reimbursement.accountNameSnapshot === '郵局' && batch.reimbursement.amount === 80, '指定收款帳戶後，合併報銷沒有存入正確帳戶或金額錯誤。');
+      const balancesAfter = calculateAccountBalances(await repository.listAccounts(), await repository.listTransactions());
+      assert(balancesAfter.get(targetAccount.id) === balancesBefore.get(targetAccount.id) + 80, '指定收款帳戶的餘額沒有正確增加。');
+      assert(balancesAfter.get(cash.id) === balancesBefore.get(cash.id) && balancesAfter.get(bank.id) === balancesBefore.get(bank.id), '來源支出帳戶餘額不應因指定收款帳戶而額外變動。');
+      await repository.deleteTransaction(cashItem.id);
+      const afterPartialDelete = await repository.listTransactions();
+      const reduced = afterPartialDelete.find((transaction) => transaction.id === batch.reimbursement.id);
+      assert(reduced?.accountId === targetAccount.id && reduced.amount === 30, '刪除其中一筆跨帳戶項目後，剩餘合併報銷沒有維持原指定的收款帳戶。');
+      await repository.deleteTransaction(batch.reimbursement.id);
+    });
+
     await test('合併請款依各項目的請款比例計算金額，100% 精確全額、其餘無條件捨去到十位', async () => {
       const ratioAccount = await repository.createAccount({ name: '請款比例測試帳戶', initialBalance: 0 });
       const expenseA = await repository.createTransaction({ type: 'expense', amount: 1234, claimRatio: 50, accountId: ratioAccount.id, parentCategoryId: food.id, subcategoryId: meal.id, isPlannedClaim: true, date: '2026-09-01', time: '09:00' });

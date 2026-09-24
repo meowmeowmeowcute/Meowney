@@ -1,7 +1,7 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=61';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=61';
-import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=61';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=61';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=62';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=62';
+import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=62';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=62';
 
 const DEFAULT_CLAIM_RATIO_PRESETS = [66, 100];
 
@@ -21,6 +21,7 @@ const state = {
   claimCandidates: [],
   transactionDefaults: {},
   claimRatioPresets: [...DEFAULT_CLAIM_RATIO_PRESETS],
+  batchReimbursementAccountId: null,
   templates: [],
   amountEditor: null,
 };
@@ -229,15 +230,20 @@ function claimableAmount(transaction) {
 function isZeroRatioClaim(transaction) {
   return Number.isFinite(transaction.claimRatio) ? transaction.claimRatio <= 0 : false;
 }
+function fixedBatchReimbursementAccount() {
+  if (!state.batchReimbursementAccountId) return null;
+  return state.accounts.find((account) => account.id === state.batchReimbursementAccountId) || null;
+}
 function prepareClaimSelection(status, transactions) {
   const availableIds = new Set(transactions.filter((transaction) => !isZeroRatioClaim(transaction)).map((transaction) => transaction.id));
   if (state.claimSelectionStatus !== status) {
     const accountIds = new Set(transactions.map((transaction) => transaction.accountId));
-    state.claimSelection = accountIds.size === 1 ? new Set(availableIds) : new Set();
+    state.claimSelection = (fixedBatchReimbursementAccount() || accountIds.size === 1) ? new Set(availableIds) : new Set();
     state.claimSelectionStatus = status;
     return;
   }
   state.claimSelection = new Set([...state.claimSelection].filter((id) => availableIds.has(id)));
+  if (fixedBatchReimbursementAccount()) return;
   const selectedAccounts = new Set(transactions.filter((transaction) => state.claimSelection.has(transaction.id)).map((transaction) => transaction.accountId));
   if (selectedAccounts.size > 1) state.claimSelection.clear();
 }
@@ -263,7 +269,8 @@ function claimAccountGroups(transactions) {
 }
 function updateClaimActionLabel() {
   const selected = selectedClaimTransactions();
-  const accountName = selected[0]?.accountName || '尚未選擇';
+  const fixedAccount = fixedBatchReimbursementAccount();
+  const accountName = fixedAccount ? fixedAccount.name : (selected[0]?.accountName || '尚未選擇');
   const selectedTotal = selected.reduce((total, transaction) => total + claimableAmount(transaction), 0);
   const accountCount = claimAccountGroups(state.claimCandidates).length;
   $('#claim-selected-count').textContent = `${selected.length} 筆`;
@@ -272,24 +279,32 @@ function updateClaimActionLabel() {
   $('#clear-claim-selection').disabled = selected.length === 0;
   $('#create-batch-reimbursement').disabled = selected.length === 0;
   $('#create-batch-reimbursement').textContent = selected.length ? `建立合併報銷（${selected.length} 筆 · ${currency(selectedTotal)}）` : '請先選擇報銷項目';
-  $('#claim-selection-guidance').textContent = accountCount > 1 && !selected.length
-    ? '目前包含多個帳戶，請選一筆，或使用下方「全選此帳戶」；不同帳戶必須分開建立。'
-    : accountCount > 1 && selected.length
-      ? '其他帳戶已暫時停用，避免誤把不同帳戶合併。'
-      : selected.length
-        ? '目前候選項目都屬於同一帳戶；可取消不需要的項目，建立前會再次確認。'
-        : '選取後會在建立前再次顯示筆數、帳戶與總金額。';
+  $('#claim-selection-guidance').textContent = fixedAccount
+    ? `報銷收入固定存入「${fixedAccount.name}」，可勾選不同帳戶的支出一起合併。`
+    : accountCount > 1 && !selected.length
+      ? '目前包含多個帳戶，請選一筆，或使用下方「全選此帳戶」；不同帳戶必須分開建立。'
+      : accountCount > 1 && selected.length
+        ? '其他帳戶已暫時停用，避免誤把不同帳戶合併。'
+        : selected.length
+          ? '目前候選項目都屬於同一帳戶；可取消不需要的項目，建立前會再次確認。'
+          : '選取後會在建立前再次顯示筆數、帳戶與總金額。';
 }
 function renderClaimSelection(transactions, { prepare = false } = {}) {
   state.claimCandidates = transactions;
   if (prepare) prepareClaimSelection('planned', transactions);
-  const lockedAccountId = selectedClaimAccountId();
-  $('#planned-claim-query-list').innerHTML = transactions.length
-    ? claimAccountGroups(transactions).map((group) => `<section class="claim-account-group" aria-label="${escapeHTML(group.accountName)}待報銷項目">
+  const fixedAccount = fixedBatchReimbursementAccount();
+  const lockedAccountId = fixedAccount ? null : selectedClaimAccountId();
+  $('#planned-claim-query-list').innerHTML = !transactions.length
+    ? '<div class="empty-state">沒有可合併的支出。只有標記「預計請款」且尚未報銷的支出會顯示。</div>'
+    : fixedAccount
+      ? `<section class="claim-account-group" aria-label="待報銷項目">
+        <header class="claim-account-group__heading"><span><b>共 ${transactions.length} 筆</b><small>可請款合計 ${currency(transactions.reduce((total, transaction) => total + claimableAmount(transaction), 0))}</small></span><button class="button button--secondary" type="button" data-select-claim-account="all">全選</button></header>
+        ${transactions.map((transaction) => claimSelectionRowMarkup(transaction, null)).join('')}
+      </section>`
+      : claimAccountGroups(transactions).map((group) => `<section class="claim-account-group" aria-label="${escapeHTML(group.accountName)}待報銷項目">
       <header class="claim-account-group__heading"><span><b>${escapeHTML(group.accountName)}</b><small>${group.transactions.length} 筆 · 可請款合計 ${currency(group.transactions.reduce((total, transaction) => total + claimableAmount(transaction), 0))}</small></span><button class="button button--secondary" type="button" data-select-claim-account="${group.accountId}">${lockedAccountId && lockedAccountId !== group.accountId ? '改選此帳戶' : '全選此帳戶'}</button></header>
       ${group.transactions.map((transaction) => claimSelectionRowMarkup(transaction, lockedAccountId)).join('')}
-    </section>`).join('')
-    : '<div class="empty-state">沒有可合併的支出。只有標記「預計請款」且尚未報銷的支出會顯示。</div>';
+    </section>`).join('');
   updateClaimActionLabel();
   $$('[data-claim-select]').forEach((input) => input.addEventListener('change', () => {
     if (input.checked) state.claimSelection.add(input.dataset.claimSelect);
@@ -297,7 +312,8 @@ function renderClaimSelection(transactions, { prepare = false } = {}) {
     renderClaimSelection(transactions);
   }));
   $$('[data-select-claim-account]').forEach((button) => button.addEventListener('click', () => {
-    state.claimSelection = new Set(transactions.filter((transaction) => transaction.accountId === button.dataset.selectClaimAccount && !isZeroRatioClaim(transaction)).map((transaction) => transaction.id));
+    const targetAccountId = button.dataset.selectClaimAccount;
+    state.claimSelection = new Set(transactions.filter((transaction) => (targetAccountId === 'all' || transaction.accountId === targetAccountId) && !isZeroRatioClaim(transaction)).map((transaction) => transaction.id));
     renderClaimSelection(transactions);
   }));
 }
@@ -509,6 +525,8 @@ function renderSettings() {
     ? subcategories.map((subcategory) => `<div class="manager-row"><span class="manager-row__text"><b>${escapeHTML(subcategory.name)}</b><small>${escapeHTML(parentName(subcategory.parentId))}</small></span><button class="manager-action" type="button" data-edit-subcategory="${subcategory.id}">編輯</button><button class="manager-action manager-action--danger" type="button" data-delete-subcategory="${subcategory.id}">刪除</button></div>`).join('')
     : '<p class="manager-empty">尚無子類別。</p>';
   $('#subcategory-parent-input').innerHTML = state.categories.map((parent) => `<option value="${parent.id}">${escapeHTML(parent.name)}</option>`).join('');
+  $('#batch-reimbursement-account-select').innerHTML = `<option value="">不指定（沿用原支出帳戶）</option>${state.accounts.map((account) => `<option value="${account.id}">${escapeHTML(account.name)}</option>`).join('')}`;
+  $('#batch-reimbursement-account-select').value = state.batchReimbursementAccountId || '';
   renderClaimRatioPresetManager();
   renderTemplateManager();
   bindManagerActions();
@@ -1237,13 +1255,19 @@ async function createBatchReimbursement() {
   const selected = selectedClaimTransactions();
   const transactionIds = selected.map((transaction) => transaction.id);
   if (!transactionIds.length) return showToast('請至少選擇一筆未請款支出。');
-  const accountIds = new Set(selected.map((transaction) => transaction.accountId));
-  if (accountIds.size !== 1) return showToast('不同帳戶必須分開建立合併報銷。');
+  const fixedAccount = fixedBatchReimbursementAccount();
+  let accountName;
+  if (fixedAccount) {
+    accountName = fixedAccount.name;
+  } else {
+    const accountIds = new Set(selected.map((transaction) => transaction.accountId));
+    if (accountIds.size !== 1) return showToast('不同帳戶必須分開建立合併報銷，或在設定中指定合併報銷收款帳戶。');
+    accountName = selected[0].accountName;
+  }
   const selectedTotal = selected.reduce((total, transaction) => total + claimableAmount(transaction), 0);
-  const accountName = selected[0].accountName;
-  if (!window.confirm(`將「${accountName}」的 ${selected.length} 筆支出合併為一筆 ${currency(selectedTotal)} 的報銷收入。建立後原支出會取消預計請款，確定建立嗎？`)) return;
+  if (!window.confirm(`將 ${selected.length} 筆支出合併為一筆 ${currency(selectedTotal)} 的報銷收入，存入「${accountName}」。建立後原支出會取消預計請款，確定建立嗎？`)) return;
   try {
-    const batch = await state.repository.createBatchReimbursement(transactionIds, $('#claim-note-input').value, todayValue(), timeValue());
+    const batch = await state.repository.createBatchReimbursement(transactionIds, $('#claim-note-input').value, todayValue(), timeValue(), fixedAccount ? fixedAccount.id : null);
     state.claimSelection.clear();
     state.claimSelectionStatus = null;
     $('#claim-note-input').value = '';
@@ -1598,6 +1622,13 @@ function initialiseEvents() {
     await addClaimRatioPreset(input.value);
     input.value = '';
   });
+  $('#batch-reimbursement-account-select').addEventListener('change', async (event) => {
+    state.batchReimbursementAccountId = validAccountId(event.target.value) || null;
+    await state.repository.setSetting('batch-reimbursement-account-id', state.batchReimbursementAccountId);
+    state.claimSelection.clear();
+    state.claimSelectionStatus = null;
+    renderQuery();
+  });
   $('#new-account').addEventListener('click', () => showAccountForm());
   $('#new-parent-category').addEventListener('click', () => showParentCategoryForm());
   $('#new-subcategory').addEventListener('click', () => {
@@ -1667,6 +1698,8 @@ async function initialiseApp() {
     state.claimRatioPresets = normaliseClaimRatioPresets(Array.isArray(savedClaimRatioPresets) ? savedClaimRatioPresets : DEFAULT_CLAIM_RATIO_PRESETS);
     const savedTemplates = await state.repository.getSetting('transaction-templates');
     state.templates = Array.isArray(savedTemplates) ? savedTemplates : [];
+    const savedBatchReimbursementAccountId = await state.repository.getSetting('batch-reimbursement-account-id');
+    state.batchReimbursementAccountId = validAccountId(savedBatchReimbursementAccountId);
     render();
   } catch (error) {
     $('#transaction-list').innerHTML = `<div class="empty-state">無法開啟本機資料：${escapeHTML(error.message || '請重新整理後再試。')}</div>`;

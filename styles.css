@@ -239,6 +239,8 @@ textarea { padding: 11px; resize: vertical; }
 .claim-ratio-note { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; }
 .claim-ratio-preset-body { padding-top: 4px; }
 .claim-ratio-preset-hint { padding-top: 0; padding-bottom: 10px; }
+.batch-reimbursement-account-hint { padding-top: 0; padding-bottom: 10px; }
+.batch-reimbursement-account-field { display: grid; gap: 5px; margin-bottom: 10px; color: var(--muted); font-size: 12px; }
 .template-manager-hint { padding-top: 0; padding-bottom: 10px; }
 .save-as-template { margin-bottom: 8px; }
 .transaction-claim-note { color: #e8bd6a; }
