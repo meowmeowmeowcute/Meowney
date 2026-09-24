@@ -1,5 +1,5 @@
-import { DIRECT_EXPENSE_PARENT_CATEGORY_NAME } from './data-layer.js?v=65';
-import { calculateClaimAmount } from './calculator.js?v=65';
+import { DIRECT_EXPENSE_PARENT_CATEGORY_NAME } from './data-layer.js?v=66';
+import { calculateClaimAmount } from './calculator.js?v=66';
 
 export const BACKUP_FORMAT = 'meowney-backup';
 export const BACKUP_VERSION = 1;

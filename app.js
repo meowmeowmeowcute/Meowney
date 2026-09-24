@@ -1,7 +1,7 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, groupReimbursementItems, MeowneyRepository } from './data-layer.js?v=65';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=65';
-import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=65';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=65';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, groupReimbursementItems, MeowneyRepository } from './data-layer.js?v=66';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=66';
+import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=66';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=66';
 
 const DEFAULT_CLAIM_RATIO_PRESETS = [66, 100];
 
@@ -19,6 +19,7 @@ const state = {
   claimSelection: new Set(),
   claimSelectionStatus: null,
   claimCandidates: [],
+  claimGroupsOpen: new Set(),
   subcategoryClaimCandidates: [],
   transactionDefaults: {},
   claimRatioPresets: [...DEFAULT_CLAIM_RATIO_PRESETS],
@@ -270,6 +271,34 @@ function claimSelectionRowMarkup(transaction, lockedAccountId) {
   const ratioNote = `<small class="claim-ratio-note">請款比例 ${ratio}%${zeroRatio ? '，比例 0% 無法勾選' : ` · 可請款 ${currency(claimableAmount(transaction))}`}</small>`;
   return `<label class="claim-selectable ${blocked ? 'claim-selectable--blocked' : ''}"><input type="checkbox" data-claim-select="${transaction.id}" ${selected ? 'checked' : ''} ${blocked ? 'disabled' : ''} aria-label="選擇 ${escapeHTML(transactionTitle(transaction))}${zeroRatio ? '，比例 0% 無法勾選' : ''}" /><div>${queryTransactionRowMarkup(transaction)}${ratioNote}</div></label>`;
 }
+function claimSelectableIds(members, lockedAccountId) {
+  return members
+    .filter((transaction) => !isZeroRatioClaim(transaction) && !(lockedAccountId && transaction.accountId !== lockedAccountId))
+    .map((transaction) => transaction.id);
+}
+function claimGroupRowMarkup(group, members, lockedAccountId, openKey) {
+  const selectableIds = claimSelectableIds(members, lockedAccountId);
+  const selectedCount = members.filter((transaction) => state.claimSelection.has(transaction.id)).length;
+  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => state.claimSelection.has(id));
+  const blocked = selectableIds.length === 0;
+  const claimable = members.filter((transaction) => !isZeroRatioClaim(transaction)).reduce((total, transaction) => total + claimableAmount(transaction), 0);
+  const accountNames = [...new Set(members.map((transaction) => transaction.accountName))].join('、');
+  return `<div class="claim-group">
+    <label class="claim-selectable ${blocked ? 'claim-selectable--blocked' : ''}"><input type="checkbox" data-claim-group="${group.ids.join(',')}" ${allSelected ? 'checked' : ''} ${!allSelected && selectedCount ? 'data-indeterminate="true"' : ''} ${blocked ? 'disabled' : ''} aria-label="選擇${escapeHTML(group.label)}全部 ${group.count} 筆" /><div>
+      <div class="query-row"><div><b>${escapeHTML(group.label)}</b><span>${group.count} 筆 · ${escapeHTML(formatDateRange(group.firstDate, group.lastDate))} · ${escapeHTML(accountNames)}</span></div><strong class="expense">-${currency(group.originalAmount)}</strong></div>
+      <small class="claim-ratio-note">已選 ${selectedCount}/${group.count} 筆 · 可請款 ${currency(claimable)}</small>
+    </div></label>
+    <details class="claim-group__details" data-claim-group-key="${escapeHTML(openKey)}" ${state.claimGroupsOpen.has(openKey) ? 'open' : ''}><summary>逐筆調整（${group.count} 筆）</summary>${members.map((transaction) => claimSelectionRowMarkup(transaction, lockedAccountId)).join('')}</details>
+  </div>`;
+}
+function claimRowsMarkup(transactions, lockedAccountId, sectionKey) {
+  return groupReimbursementItems(transactions).map((group) => {
+    const members = group.ids.map((id) => transactions.find((transaction) => transaction.id === id));
+    return members.length === 1
+      ? claimSelectionRowMarkup(members[0], lockedAccountId)
+      : claimGroupRowMarkup(group, members, lockedAccountId, `${sectionKey}:${group.key}`);
+  }).join('');
+}
 function claimAccountGroups(transactions) {
   const groups = new Map();
   transactions.forEach((transaction) => {
@@ -310,17 +339,32 @@ function renderClaimSelection(transactions, { prepare = false } = {}) {
     : fixedAccount
       ? `<section class="claim-account-group" aria-label="待報銷項目">
         <header class="claim-account-group__heading"><span><b>共 ${transactions.length} 筆</b><small>可請款合計 ${currency(transactions.reduce((total, transaction) => total + claimableAmount(transaction), 0))}</small></span><button class="button button--secondary" type="button" data-select-claim-account="all">全選</button></header>
-        ${transactions.map((transaction) => claimSelectionRowMarkup(transaction, null)).join('')}
+        ${claimRowsMarkup(transactions, null, 'all')}
       </section>`
       : claimAccountGroups(transactions).map((group) => `<section class="claim-account-group" aria-label="${escapeHTML(group.accountName)}待報銷項目">
       <header class="claim-account-group__heading"><span><b>${escapeHTML(group.accountName)}</b><small>${group.transactions.length} 筆 · 可請款合計 ${currency(group.transactions.reduce((total, transaction) => total + claimableAmount(transaction), 0))}</small></span><button class="button button--secondary" type="button" data-select-claim-account="${group.accountId}">${lockedAccountId && lockedAccountId !== group.accountId ? '改選此帳戶' : '全選此帳戶'}</button></header>
-      ${group.transactions.map((transaction) => claimSelectionRowMarkup(transaction, lockedAccountId)).join('')}
+      ${claimRowsMarkup(group.transactions, lockedAccountId, group.accountId)}
     </section>`).join('');
   updateClaimActionLabel();
   $$('[data-claim-select]').forEach((input) => input.addEventListener('change', () => {
     if (input.checked) state.claimSelection.add(input.dataset.claimSelect);
     else state.claimSelection.delete(input.dataset.claimSelect);
     renderClaimSelection(transactions);
+  }));
+  $$('[data-claim-group]').forEach((input) => {
+    input.indeterminate = input.dataset.indeterminate === 'true';
+    input.addEventListener('change', () => {
+      const ids = input.dataset.claimGroup.split(',');
+      if (input.checked) {
+        const members = transactions.filter((transaction) => ids.includes(transaction.id));
+        claimSelectableIds(members, fixedAccount ? null : selectedClaimAccountId()).forEach((id) => state.claimSelection.add(id));
+      } else ids.forEach((id) => state.claimSelection.delete(id));
+      renderClaimSelection(transactions);
+    });
+  });
+  $$('[data-claim-group-key]').forEach((details) => details.addEventListener('toggle', () => {
+    if (details.open) state.claimGroupsOpen.add(details.dataset.claimGroupKey);
+    else state.claimGroupsOpen.delete(details.dataset.claimGroupKey);
   }));
   $$('[data-select-claim-account]').forEach((button) => button.addEventListener('click', () => {
     const targetAccountId = button.dataset.selectClaimAccount;

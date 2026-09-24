@@ -111,6 +111,8 @@ textarea { padding: 11px; resize: vertical; }
 .query-list { display: grid; gap: 8px; }
 .query-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
 .query-row:last-child { border-bottom: 0; }
+.query-row > div { min-width: 0; }
+.query-row > strong { flex: none; white-space: nowrap; }
 .query-row span { color: var(--muted); }
 .query-row .transaction-note { margin-top: 4px; }
 .query-row .expense { color: var(--red); }
@@ -132,6 +134,11 @@ textarea { padding: 11px; resize: vertical; }
 .claim-selectable input { width: 21px; height: 21px; min-height: 0; accent-color: var(--accent); }
 .claim-selectable .query-row { padding: 0; border: 0; }
 .claim-selectable--blocked { opacity: .45; cursor: not-allowed; }
+.claim-group { border-bottom: 1px solid rgba(255, 255, 255, .06); }
+.claim-group > .claim-selectable { border-bottom: 0; padding-bottom: 2px; }
+.claim-group__details { padding-left: 31px; }
+.claim-group__details summary { display: flex; min-height: 44px; align-items: center; color: var(--accent); font-size: 12px; cursor: pointer; }
+.claim-group__details .claim-selectable:last-child { border-bottom: 0; }
 .claim-selection-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
 .claim-selection-summary span { min-width: 0; padding: 9px; border-radius: 10px; background: #171a1b; color: var(--muted); font-size: 11px; }
 .claim-selection-summary b, .claim-selection-summary strong { display: block; overflow: hidden; margin-top: 4px; color: var(--text); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }

@@ -3,7 +3,7 @@
  * 所有餘額皆由帳戶初始餘額與交易重新計算，不會寫入可失真的快取餘額。
  */
 
-import { calculateClaimAmount } from './calculator.js?v=65';
+import { calculateClaimAmount } from './calculator.js?v=66';
 
 export const DATABASE_NAME = 'meowney-ledger';
 export const DATABASE_VERSION = 1;
@@ -373,7 +373,8 @@ export function groupReimbursementItems(expenses, amountsByExpenseId = null) {
       ? expense.subcategoryNameSnapshot || '支出'
       : expense.note?.trim() || expense.subcategoryNameSnapshot || expense.parentCategoryNameSnapshot || '支出';
     const claimed = Number(amountsByExpenseId?.[expense.id] ?? expense.amount);
-    const group = groups.get(key) || { key, label, count: 0, originalAmount: 0, claimedAmount: 0, firstDate: expense.date, lastDate: expense.date };
+    const group = groups.get(key) || { key, label, ids: [], count: 0, originalAmount: 0, claimedAmount: 0, firstDate: expense.date, lastDate: expense.date };
+    group.ids.push(expense.id);
     group.count += 1;
     group.originalAmount += expense.amount;
     group.claimedAmount += claimed;

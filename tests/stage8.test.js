@@ -76,6 +76,7 @@ export async function runStage8Tests() {
     const [app, html, css, requirements, uxNotes] = await Promise.all([read('app.js'), read('index.html'), read('styles.css'), read('PROJECT_REQUIREMENTS.md'), read('UX_IMPROVEMENTS.md')]);
     assert(html.includes('id="open-batch-reimbursement"') && app.includes('openBatchReimbursementFlow'), '紀錄頁缺少合併報銷捷徑。');
     assert(app.includes('claimAccountGroups(transactions)') && app.includes('data-select-claim-account') && app.includes('claim-selectable--blocked'), '候選項目沒有依帳戶分組或防止跨帳戶誤選。');
+    assert(app.includes('groupReimbursementItems(transactions).map') && app.includes('data-claim-group=') && app.includes('input.indeterminate') && app.includes('class="claim-group__details"'), '候選項目沒有依子類別合併顯示，或無法整組勾選／逐筆調整。');
     assert(html.includes('id="claim-selected-count"') && html.includes('id="claim-selected-account"') && html.includes('id="claim-selected-total"'), '選取筆數、帳戶或合計金額摘要不完整。');
     assert(html.includes('id="clear-claim-selection"') && html.includes('id="cancel-batch-reimbursement"') && app.includes('clearClaimSelection') && app.includes('cancelBatchReimbursement'), '清除選取或取消整個流程的入口不完整。');
     assert(html.includes('id="action-dialog"') && html.includes('id="confirm-action-dialog"') && app.includes('requestCreateBatchReimbursement') && app.includes('onConfirm: createBatchReimbursement') && app.includes("openSheet(batch.reimbursement.id)"), '建立前確認或建立後直接核對明細的流程不存在。');
