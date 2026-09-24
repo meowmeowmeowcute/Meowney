@@ -5,6 +5,7 @@ import {
   calculateAccountBalances,
   calculateDebtRemaining,
   deleteDatabase,
+  groupReimbursementItems,
 } from '../data-layer.js';
 
 const testResults = [];
@@ -74,7 +75,7 @@ export async function runStage2Tests() {
       const batch = await repository.createBatchReimbursement([directExpense.id, secondExpense.id], '八月費用報銷', '2026-08-24', '09:00');
       const submitted = await repository.listTransactions();
       const linkedSources = submitted.filter((transaction) => transaction.reimbursementTransactionId === batch.reimbursement.id);
-      assert(batch.reimbursement.isReimbursement === true && batch.reimbursement.isBatchReimbursement === true && batch.reimbursement.amount === 45 && batch.reimbursement.note.includes('八月費用報銷') && batch.reimbursement.note.includes('零星支出') && batch.reimbursement.note.includes('待請款車資'), '合併報銷沒有建立一筆正確的收入與項目備註。');
+      assert(batch.reimbursement.isReimbursement === true && batch.reimbursement.isBatchReimbursement === true && batch.reimbursement.amount === 45 && batch.reimbursement.note.includes('八月費用報銷') && batch.reimbursement.note.includes('零星支出') && batch.reimbursement.note.includes('餐飲') && !batch.reimbursement.note.includes('待請款車資'), '合併報銷沒有建立一筆正確的收入與項目備註（其他類別列備註，其餘列子類別）。');
       assert(linkedSources.length === 2 && linkedSources.every((transaction) => transaction.isPlannedClaim === false && transaction.claimBatchId === null && transaction.claimNote === null), '合併報銷沒有原子解除原支出的請款狀態。');
       const balancesAfter = calculateAccountBalances(await repository.listAccounts(), submitted);
       assert(balancesAfter.get(cash.id) === balancesBefore.get(cash.id) + 45 && balancesAfter.get(bank.id) === balancesBefore.get(bank.id), '合併報銷沒有只以一筆收入增加正確帳戶餘額。');
@@ -91,7 +92,7 @@ export async function runStage2Tests() {
       await repository.deleteTransaction(directExpense.id);
       const afterSourceDelete = await repository.listTransactions();
       const reducedBatch = afterSourceDelete.find((transaction) => transaction.id === batch.reimbursement.id);
-      assert(reducedBatch?.amount === 10 && reducedBatch.note.includes('待請款車資') && !reducedBatch.note.includes('零星支出'), '刪除合併報銷中的原支出沒有同步更新報銷事項。');
+      assert(reducedBatch?.amount === 10 && reducedBatch.note.includes('餐飲') && !reducedBatch.note.includes('零星支出'), '刪除合併報銷中的原支出沒有同步更新報銷事項。');
       await repository.deleteTransaction(batch.reimbursement.id);
       const afterBatchCancellation = await repository.listTransactions();
       const restoredExpense = afterBatchCancellation.find((transaction) => transaction.id === secondExpense.id);
@@ -133,6 +134,27 @@ export async function runStage2Tests() {
       await repository.deleteTransaction(plain.id);
       await repository.deleteTransaction(already.id);
       await repository.deleteTransaction(income.id);
+    });
+
+    await test('合併請款項目：非「其他」母類別依子類別合併加總，「其他」逐筆列出', async () => {
+      const groupAccount = await repository.createAccount({ name: '分組測試帳戶', initialBalance: 0 });
+      const life = await repository.createParentCategory({ name: '分組測試生活' });
+      const laundry = await repository.createSubcategory({ parentCategoryId: life.id, name: '烘衣服' });
+      const base = { type: 'expense', accountId: groupAccount.id, isPlannedClaim: true, time: '09:00' };
+      const laundryA = await repository.createTransaction({ ...base, amount: 40, parentCategoryId: life.id, subcategoryId: laundry.id, note: '第一次', date: '2026-09-01' });
+      const laundryB = await repository.createTransaction({ ...base, amount: 40, parentCategoryId: life.id, subcategoryId: laundry.id, date: '2026-09-15' });
+      const laundryC = await repository.createTransaction({ ...base, amount: 45, claimRatio: 50, parentCategoryId: life.id, subcategoryId: laundry.id, date: '2026-09-08' });
+      const otherA = await repository.createTransaction({ ...base, amount: 30, parentCategoryId: other.id, note: '文具', date: '2026-09-02' });
+      const otherB = await repository.createTransaction({ ...base, amount: 20, parentCategoryId: other.id, note: '郵資', date: '2026-09-03' });
+      const batch = await repository.createBatchReimbursement([laundryA.id, otherA.id, laundryB.id, otherB.id, laundryC.id], '', '2026-09-20', '10:00');
+      const items = groupReimbursementItems([laundryA, otherA, laundryB, otherB, laundryC], batch.reimbursement.reimbursementAmountsByExpenseId);
+      const laundryItem = items.find((item) => item.label === '烘衣服');
+      assert(items.length === 3 && items.map((item) => item.label).join(',') === '烘衣服,文具,郵資', '項目沒有依子類別合併，或「其他」沒有逐筆列出。');
+      assert(laundryItem.count === 3 && laundryItem.originalAmount === 125 && laundryItem.claimedAmount === 100 && laundryItem.firstDate === '2026-09-01' && laundryItem.lastDate === '2026-09-15', '同子類別合併後的筆數、原始金額、請款金額或日期範圍錯誤。');
+      assert(batch.reimbursement.amount === 150, '合併報銷總額錯誤。');
+      assert(batch.reimbursement.note.includes('烘衣服 3 筆（NT$ 125）') && batch.reimbursement.note.includes('文具（NT$ 30）') && batch.reimbursement.note.includes('郵資（NT$ 20）') && !batch.reimbursement.note.includes('第一次'), '報銷備註沒有依子類別合併列出項目。');
+      await repository.deleteTransaction(batch.reimbursement.id);
+      for (const expense of [laundryA, laundryB, laundryC, otherA, otherB]) await repository.deleteTransaction(expense.id);
     });
 
     await test('合併請款依各項目的請款比例計算金額，100% 精確全額、其餘無條件捨去到十位', async () => {

@@ -1,7 +1,7 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=64';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=64';
-import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=64';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=64';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, groupReimbursementItems, MeowneyRepository } from './data-layer.js?v=65';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=65';
+import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=65';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=65';
 
 const DEFAULT_CLAIM_RATIO_PRESETS = [66, 100];
 
@@ -216,11 +216,21 @@ function batchReimbursementItemsMarkup(transaction) {
     .map((id) => state.transactions.find((item) => item.id === id))
     .filter(Boolean);
   if (!sources.length) return '<li class="batch-reimbursement-items__empty">找不到已包含的報銷項目。</li>';
-  return sources.map((source) => {
-    const claimed = Number(transaction.reimbursementAmountsByExpenseId?.[source.id] ?? source.amount);
-    const partial = claimed < source.amount;
-    return `<li><span>${escapeHTML(transactionTitle(source))}${partial ? `<small class="claim-ratio-note">原始金額 ${currency(source.amount)} -${currency(source.amount - claimed)}</small>` : ''}</span><time>${escapeHTML(formatDate(source.date))}</time><strong>${currency(claimed)}</strong></li>`;
+  return groupReimbursementItems(sources, transaction.reimbursementAmountsByExpenseId).map((item) => {
+    const details = [
+      item.count > 1 ? `${item.count} 筆` : '',
+      item.claimedAmount < item.originalAmount ? `原始金額 ${currency(item.originalAmount)} -${currency(item.originalAmount - item.claimedAmount)}` : '',
+    ].filter(Boolean).join(' · ');
+    return `<li><span>${escapeHTML(item.label)}${details ? `<small class="claim-ratio-note">${details}</small>` : ''}</span><time>${escapeHTML(formatDateRange(item.firstDate, item.lastDate))}</time><strong>${currency(item.claimedAmount)}</strong></li>`;
   }).join('');
+}
+function formatDateRange(firstDate, lastDate) {
+  if (firstDate === lastDate) return formatDate(firstDate);
+  const [firstYear, firstMonth, firstDay] = firstDate.split('-');
+  const [lastYear, lastMonth, lastDay] = lastDate.split('-');
+  return firstYear === lastYear
+    ? `${firstYear}/${Number(firstMonth)}/${Number(firstDay)}–${Number(lastMonth)}/${Number(lastDay)}`
+    : `${formatDate(firstDate)}–${formatDate(lastDate)}`;
 }
 function queryTransactionRowMarkup(transaction) {
   return `<div class="query-row"><div><b>${escapeHTML(transactionTitle(transaction))}</b><span>${escapeHTML(transaction.date)} · ${escapeHTML(transaction.accountName)} · ${escapeHTML(transaction.time)}</span>${transactionNoteMarkup(transaction)}${transactionClaimNoteMarkup(transaction)}</div><strong class="${transaction.type}">${transactionAmountText(transaction)}</strong></div>`;

@@ -3,7 +3,7 @@
  * 所有餘額皆由帳戶初始餘額與交易重新計算，不會寫入可失真的快取餘額。
  */
 
-import { calculateClaimAmount } from './calculator.js?v=64';
+import { calculateClaimAmount } from './calculator.js?v=65';
 
 export const DATABASE_NAME = 'meowney-ledger';
 export const DATABASE_VERSION = 1;
@@ -363,14 +363,35 @@ function reimbursementSourceIds(transaction) {
   return [...new Set(sourceIds.filter((id) => typeof id === 'string' && id.trim()))];
 }
 
-function reimbursementItemLabel(expense) {
-  const title = expense.note?.trim() || expense.subcategoryNameSnapshot || expense.parentCategoryNameSnapshot || '支出';
-  return `${title}（NT$ ${expense.amount}）`;
+// 「其他」母類別的支出逐筆列出（以備註為名稱）；其餘母類別的支出依子類別合併為一個項目並加總。
+export function groupReimbursementItems(expenses, amountsByExpenseId = null) {
+  const groups = new Map();
+  for (const expense of expenses) {
+    const byCategory = expense.parentCategoryNameSnapshot !== DIRECT_EXPENSE_PARENT_CATEGORY_NAME && Boolean(expense.subcategoryId);
+    const key = byCategory ? `subcategory:${expense.subcategoryId}` : `expense:${expense.id}`;
+    const label = byCategory
+      ? expense.subcategoryNameSnapshot || '支出'
+      : expense.note?.trim() || expense.subcategoryNameSnapshot || expense.parentCategoryNameSnapshot || '支出';
+    const claimed = Number(amountsByExpenseId?.[expense.id] ?? expense.amount);
+    const group = groups.get(key) || { key, label, count: 0, originalAmount: 0, claimedAmount: 0, firstDate: expense.date, lastDate: expense.date };
+    group.count += 1;
+    group.originalAmount += expense.amount;
+    group.claimedAmount += claimed;
+    if (expense.date < group.firstDate) group.firstDate = expense.date;
+    if (expense.date > group.lastDate) group.lastDate = expense.date;
+    groups.set(key, group);
+  }
+  const roundCents = (value) => Math.round(value * 100) / 100;
+  return [...groups.values()].map((group) => ({ ...group, originalAmount: roundCents(group.originalAmount), claimedAmount: roundCents(group.claimedAmount) }));
+}
+
+function reimbursementItemLabel(item) {
+  return `${item.label}${item.count > 1 ? ` ${item.count} 筆` : ''}（NT$ ${item.originalAmount}）`;
 }
 
 function batchReimbursementNote(expenses, note) {
   const prefix = typeof note === 'string' ? note.trim() : '';
-  return [prefix, `報銷項目：${expenses.map(reimbursementItemLabel).join('、')}`].filter(Boolean).join('\n');
+  return [prefix, `報銷項目：${groupReimbursementItems(expenses).map(reimbursementItemLabel).join('、')}`].filter(Boolean).join('\n');
 }
 
 function buildReimbursementTransaction(expense, input = {}, existing = null) {
