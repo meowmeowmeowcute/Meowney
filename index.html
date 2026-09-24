@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/meowney-512.png" type="image/png" />
     <link rel="apple-touch-icon" href="icons/meowney-192.png" />
-    <link rel="stylesheet" href="styles.css?v=62" />
+    <link rel="stylesheet" href="styles.css?v=63" />
   </head>
   <body>
     <div class="app-shell">
@@ -387,7 +387,16 @@
       </div>
     </section>
 
+    <section id="batch-reimbursement-confirm-dialog" class="action-dialog" role="alertdialog" aria-modal="true" aria-labelledby="batch-reimbursement-confirm-title" hidden>
+      <h2 id="batch-reimbursement-confirm-title">建立合併報銷？</h2>
+      <p id="batch-reimbursement-confirm-message"></p>
+      <div>
+        <button id="cancel-batch-reimbursement-confirm" class="button button--secondary" type="button">取消</button>
+        <button id="confirm-batch-reimbursement" class="button button--primary" type="button">確認建立</button>
+      </div>
+    </section>
+
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script type="module" src="app.js?v=62"></script>
+    <script type="module" src="app.js?v=63"></script>
   </body>
 </html>

@@ -3,7 +3,7 @@
  * 所有餘額皆由帳戶初始餘額與交易重新計算，不會寫入可失真的快取餘額。
  */
 
-import { calculateClaimAmount } from './calculator.js?v=62';
+import { calculateClaimAmount } from './calculator.js?v=63';
 
 export const DATABASE_NAME = 'meowney-ledger';
 export const DATABASE_VERSION = 1;

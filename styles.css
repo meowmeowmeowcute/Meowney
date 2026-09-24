@@ -339,6 +339,10 @@ textarea { padding: 11px; resize: vertical; }
 .confirm-dialog h2 { margin-bottom: 8px; }
 .confirm-dialog p { color: #dfc7c9; font-size: 14px; line-height: 1.5; }
 .confirm-dialog > div { display: flex; justify-content: end; gap: 8px; }
+.action-dialog { position: fixed; z-index: 13; right: 22px; bottom: 30px; left: 22px; max-width: 420px; margin: auto; padding: 20px; border: 1px solid var(--line); border-radius: 18px; background: #181315; box-shadow: 0 14px 44px rgba(0, 0, 0, .48); }
+.action-dialog h2 { margin-bottom: 8px; }
+.action-dialog p { color: var(--muted); font-size: 14px; line-height: 1.5; }
+.action-dialog > div { display: flex; justify-content: end; gap: 8px; }
 .toast { position: fixed; z-index: 20; right: 20px; bottom: calc(var(--nav-height) + 28px + env(safe-area-inset-bottom)); left: 20px; max-width: 440px; margin: auto; padding: 12px 14px; border: 1px solid #49675c; border-radius: 12px; background: #0f2019; color: #e1fff0; box-shadow: 0 8px 22px rgba(0, 0, 0, .35); font-size: 14px; text-align: center; }
 
 @media (min-width: 700px) {

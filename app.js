@@ -1,7 +1,7 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=62';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=62';
-import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=62';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=62';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=63';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=63';
+import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=63';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=63';
 
 const DEFAULT_CLAIM_RATIO_PRESETS = [66, 100];
 
@@ -1251,10 +1251,9 @@ function showToast(message) {
   toastTimer = setTimeout(() => { $('#toast').hidden = true; }, 3600);
 }
 
-async function createBatchReimbursement() {
+function requestCreateBatchReimbursement() {
   const selected = selectedClaimTransactions();
-  const transactionIds = selected.map((transaction) => transaction.id);
-  if (!transactionIds.length) return showToast('請至少選擇一筆未請款支出。');
+  if (!selected.length) return showToast('請至少選擇一筆未請款支出。');
   const fixedAccount = fixedBatchReimbursementAccount();
   let accountName;
   if (fixedAccount) {
@@ -1265,7 +1264,20 @@ async function createBatchReimbursement() {
     accountName = selected[0].accountName;
   }
   const selectedTotal = selected.reduce((total, transaction) => total + claimableAmount(transaction), 0);
-  if (!window.confirm(`將 ${selected.length} 筆支出合併為一筆 ${currency(selectedTotal)} 的報銷收入，存入「${accountName}」。建立後原支出會取消預計請款，確定建立嗎？`)) return;
+  $('#batch-reimbursement-confirm-message').textContent = `將 ${selected.length} 筆支出合併為一筆 ${currency(selectedTotal)} 的報銷收入，存入「${accountName}」。建立後原支出會取消預計請款，確定建立嗎？`;
+  $('#batch-reimbursement-confirm-dialog').hidden = false;
+  $('#cancel-batch-reimbursement-confirm').focus();
+}
+function closeBatchReimbursementConfirm() {
+  $('#batch-reimbursement-confirm-dialog').hidden = true;
+  $('#create-batch-reimbursement').focus();
+}
+async function createBatchReimbursement() {
+  closeBatchReimbursementConfirm();
+  const selected = selectedClaimTransactions();
+  const transactionIds = selected.map((transaction) => transaction.id);
+  if (!transactionIds.length) return;
+  const fixedAccount = fixedBatchReimbursementAccount();
   try {
     const batch = await state.repository.createBatchReimbursement(transactionIds, $('#claim-note-input').value, todayValue(), timeValue(), fixedAccount ? fixedAccount.id : null);
     state.claimSelection.clear();
@@ -1593,7 +1605,9 @@ function initialiseEvents() {
   $('#open-batch-reimbursement').addEventListener('click', openBatchReimbursementFlow);
   $('#clear-claim-selection').addEventListener('click', clearClaimSelection);
   $('#cancel-batch-reimbursement').addEventListener('click', cancelBatchReimbursement);
-  $('#create-batch-reimbursement').addEventListener('click', createBatchReimbursement);
+  $('#create-batch-reimbursement').addEventListener('click', requestCreateBatchReimbursement);
+  $('#confirm-batch-reimbursement').addEventListener('click', createBatchReimbursement);
+  $('#cancel-batch-reimbursement-confirm').addEventListener('click', closeBatchReimbursementConfirm);
   $('#export-json').addEventListener('click', exportJsonBackup);
   $('#import-json').addEventListener('click', () => $('#json-import-input').click());
   $('#json-import-input').addEventListener('change', async (event) => {
@@ -1677,6 +1691,11 @@ function initialiseEvents() {
     if (!$('#confirm-dialog').hidden) {
       if (event.key === 'Escape') closeDeleteConfirm();
       else trapFocus(event, $('#confirm-dialog'));
+      return;
+    }
+    if (!$('#batch-reimbursement-confirm-dialog').hidden) {
+      if (event.key === 'Escape') closeBatchReimbursementConfirm();
+      else trapFocus(event, $('#batch-reimbursement-confirm-dialog'));
       return;
     }
     if (!$('#transaction-sheet').hidden) {
