@@ -1,7 +1,7 @@
-import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=60';
-import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=60';
-import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=60';
-import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=60';
+import { calculateDebtRemaining, DIRECT_EXPENSE_PARENT_CATEGORY_NAME, MeowneyRepository } from './data-layer.js?v=61';
+import { incomeExpenseAmount, parentCategoryBreakdown, runTransactionQuery, subcategorySummary } from './query-logic.js?v=61';
+import { calculateClaimAmount, calculateExpression, updateExpression } from './calculator.js?v=61';
+import { createBackup, exportTransactionsCsv, parseBackupText, planCsvImport } from './backup-format.js?v=61';
 
 const DEFAULT_CLAIM_RATIO_PRESETS = [66, 100];
 
@@ -217,7 +217,7 @@ function batchReimbursementItemsMarkup(transaction) {
   return sources.map((source) => {
     const claimed = Number(transaction.reimbursementAmountsByExpenseId?.[source.id] ?? source.amount);
     const partial = claimed < source.amount;
-    return `<li><span>${escapeHTML(transactionTitle(source))}${partial ? `<small class="claim-ratio-note">原始金額 ${currency(source.amount)} -${currency(source.amount - claimed)}</small>` : ''}</span><strong>${currency(claimed)}</strong></li>`;
+    return `<li><span>${escapeHTML(transactionTitle(source))}${partial ? `<small class="claim-ratio-note">原始金額 ${currency(source.amount)} -${currency(source.amount - claimed)}</small>` : ''}</span><time>${escapeHTML(formatDate(source.date))}</time><strong>${currency(claimed)}</strong></li>`;
   }).join('');
 }
 function queryTransactionRowMarkup(transaction) {
