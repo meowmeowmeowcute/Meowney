@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/meowney-512.png" type="image/png" />
     <link rel="apple-touch-icon" href="icons/meowney-192.png" />
-    <link rel="stylesheet" href="styles.css?v=63" />
+    <link rel="stylesheet" href="styles.css?v=64" />
   </head>
   <body>
     <div class="app-shell">
@@ -144,6 +144,7 @@
             <section id="subcategory-query-details" class="query-detail" hidden>
               <div class="query-detail__heading"><h3 id="subcategory-query-title">子類別明細</h3><strong id="subcategory-query-total">NT$ 0</strong></div>
               <p id="subcategory-query-count" class="query-detail__count">0 筆</p>
+              <button id="mark-subcategory-planned-claims" class="button button--secondary button--full subcategory-claim-action" type="button" hidden>全部加入預計請款</button>
               <div id="query-list" class="query-list"></div>
             </section>
           </section>
@@ -209,8 +210,30 @@
           <section class="settings-group" aria-labelledby="template-manager-title">
             <div class="settings-group-heading">
               <h2 id="template-manager-title">常用範本管理</h2>
+              <button id="new-template" class="text-action" type="button">新增</button>
             </div>
-            <p class="manager-empty template-manager-hint">於記帳面板中填好支出／收入／轉帳後，點選「另存為範本」即可加入；範本會顯示在主頁的常用範本列，點一下直接新增交易。</p>
+            <p class="manager-empty template-manager-hint">於記帳面板中填好支出／收入／轉帳後，點選「另存為範本」即可加入；也可以在這裡新增或編輯範本。範本會顯示在主頁的常用範本列，點一下直接新增交易。</p>
+            <form id="template-form" class="management-form" hidden>
+              <input id="template-form-id" type="hidden" />
+              <label>範本名稱<input id="template-name-input" required maxlength="40" /></label>
+              <label>類型
+                <select id="template-type-input">
+                  <option value="expense">支出</option>
+                  <option value="income">收入</option>
+                  <option value="transfer">轉帳</option>
+                </select>
+              </label>
+              <label>金額<input id="template-amount-input" required type="number" min="0.01" step="0.01" inputmode="decimal" /></label>
+              <label id="template-account-field">帳戶<select id="template-account-input"></select></label>
+              <label id="template-parent-field">母類別<select id="template-parent-input"></select></label>
+              <label id="template-subcategory-field">子類別<select id="template-subcategory-input"></select></label>
+              <label id="template-source-account-field">轉出帳戶<select id="template-source-account-input"></select></label>
+              <label id="template-target-account-field">轉入帳戶<select id="template-target-account-input"></select></label>
+              <label>備註（選填）<input id="template-note-input" maxlength="200" /></label>
+              <label id="template-planned-claim-field" class="template-checkbox-field"><input id="template-planned-claim-input" type="checkbox" /> 標記為預計請款</label>
+              <label id="template-claim-ratio-field">請款比例（0-100）<input id="template-claim-ratio-input" type="number" min="0" max="100" step="any" inputmode="decimal" /></label>
+              <div><button class="button button--secondary" type="button" data-cancel-form="template">取消</button><button class="button button--primary" type="submit">儲存範本</button></div>
+            </form>
             <div id="template-manager-list" class="manager-list"></div>
           </section>
           <section class="settings-group" aria-labelledby="settings-file-title">
@@ -295,7 +318,7 @@
 
         <section id="batch-reimbursement-details" class="batch-reimbursement-details" aria-labelledby="batch-reimbursement-items-title" hidden>
           <p id="batch-reimbursement-note" class="batch-reimbursement-note" hidden></p>
-          <h3 id="batch-reimbursement-items-title">已報銷項目</h3>
+          <div class="query-detail__heading"><h3 id="batch-reimbursement-items-title">已報銷項目</h3><strong id="batch-reimbursement-items-total">NT$ 0</strong></div>
           <ul id="batch-reimbursement-items" class="batch-reimbursement-items"></ul>
         </section>
 
@@ -387,16 +410,16 @@
       </div>
     </section>
 
-    <section id="batch-reimbursement-confirm-dialog" class="action-dialog" role="alertdialog" aria-modal="true" aria-labelledby="batch-reimbursement-confirm-title" hidden>
-      <h2 id="batch-reimbursement-confirm-title">建立合併報銷？</h2>
-      <p id="batch-reimbursement-confirm-message"></p>
+    <section id="action-dialog" class="action-dialog" role="alertdialog" aria-modal="true" aria-labelledby="action-dialog-title" hidden>
+      <h2 id="action-dialog-title"></h2>
+      <p id="action-dialog-message"></p>
       <div>
-        <button id="cancel-batch-reimbursement-confirm" class="button button--secondary" type="button">取消</button>
-        <button id="confirm-batch-reimbursement" class="button button--primary" type="button">確認建立</button>
+        <button id="cancel-action-dialog" class="button button--secondary" type="button">取消</button>
+        <button id="confirm-action-dialog" class="button button--primary" type="button">確認</button>
       </div>
     </section>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script type="module" src="app.js?v=63"></script>
+    <script type="module" src="app.js?v=64"></script>
   </body>
 </html>

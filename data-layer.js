@@ -3,7 +3,7 @@
  * 所有餘額皆由帳戶初始餘額與交易重新計算，不會寫入可失真的快取餘額。
  */
 
-import { calculateClaimAmount } from './calculator.js?v=63';
+import { calculateClaimAmount } from './calculator.js?v=64';
 
 export const DATABASE_NAME = 'meowney-ledger';
 export const DATABASE_VERSION = 1;
@@ -1012,6 +1012,24 @@ export class MeowneyRepository {
       }
       await requestAsPromise(transactions.add(reimbursement));
       return { reimbursement, transactionIds: [...transactionIds] };
+    });
+  }
+
+  async markPlannedClaims(transactionIds) {
+    if (!Array.isArray(transactionIds) || !transactionIds.length) throw new DataValidationError('沒有可標記為預計請款的支出。');
+    return this.write(STORE.transactions, async ({ transactions }) => {
+      const updated = [];
+      for (const id of new Set(transactionIds)) {
+        const transaction = await mustGet(transactions, id, '支出');
+        if (transaction.type !== 'expense' || transaction.debtDirection || transaction.reimbursementTransactionId) {
+          throw new DataValidationError('選取項目已變更，請重新查詢後再試。');
+        }
+        if (transaction.isPlannedClaim === true) continue;
+        const next = { ...transaction, isPlannedClaim: true, claimRatio: Number.isFinite(transaction.claimRatio) ? transaction.claimRatio : 100, updatedAt: now() };
+        await requestAsPromise(transactions.put(next));
+        updated.push(next);
+      }
+      return updated;
     });
   }
 

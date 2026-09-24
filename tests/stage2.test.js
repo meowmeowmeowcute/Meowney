@@ -116,6 +116,25 @@ export async function runStage2Tests() {
       await repository.deleteTransaction(batch.reimbursement.id);
     });
 
+    await test('可一次將多筆支出加入預計請款，已在預計請款中的略過，含不合格項目時整批不變', async () => {
+      const bulkMeal = await repository.createSubcategory({ parentCategoryId: food.id, name: '批次標記測試' });
+      const plain = await repository.createTransaction({ type: 'expense', amount: 120, accountId: cash.id, parentCategoryId: food.id, subcategoryId: bulkMeal.id, date: '2026-09-06', time: '09:00' });
+      const already = await repository.createTransaction({ type: 'expense', amount: 80, claimRatio: 50, accountId: bank.id, parentCategoryId: food.id, subcategoryId: bulkMeal.id, isPlannedClaim: true, date: '2026-09-06', time: '09:05' });
+      const income = await repository.createTransaction({ type: 'income', amount: 10, accountId: cash.id, date: '2026-09-06', time: '09:10' });
+      const beforeRejected = await repository.listTransactions();
+      await rejects(() => repository.markPlannedClaims([plain.id, income.id]), DataValidationError);
+      assert(JSON.stringify(await repository.listTransactions()) === JSON.stringify(beforeRejected), '含不合格項目時，批次加入預計請款沒有整批回滾。');
+      const updated = await repository.markPlannedClaims([plain.id, already.id]);
+      const after = await repository.listTransactions();
+      const plainAfter = after.find((transaction) => transaction.id === plain.id);
+      const alreadyAfter = after.find((transaction) => transaction.id === already.id);
+      assert(updated.length === 1 && plainAfter.isPlannedClaim === true && plainAfter.claimRatio === 100, '一般支出沒有被加入預計請款或比例不是預設 100%。');
+      assert(alreadyAfter.isPlannedClaim === true && alreadyAfter.claimRatio === 50, '已在預計請款中的支出被重複修改或比例被覆蓋。');
+      await repository.deleteTransaction(plain.id);
+      await repository.deleteTransaction(already.id);
+      await repository.deleteTransaction(income.id);
+    });
+
     await test('合併請款依各項目的請款比例計算金額，100% 精確全額、其餘無條件捨去到十位', async () => {
       const ratioAccount = await repository.createAccount({ name: '請款比例測試帳戶', initialBalance: 0 });
       const expenseA = await repository.createTransaction({ type: 'expense', amount: 1234, claimRatio: 50, accountId: ratioAccount.id, parentCategoryId: food.id, subcategoryId: meal.id, isPlannedClaim: true, date: '2026-09-01', time: '09:00' });

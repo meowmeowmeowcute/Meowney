@@ -145,6 +145,8 @@ textarea { padding: 11px; resize: vertical; }
 .text-action { min-height: 40px; padding: 8px 4px; border: 0; background: transparent; color: var(--accent); font-size: 14px; font-weight: 800; }
 .management-form { display: grid; gap: 10px; margin: 8px 0 10px; padding: 12px; border: 1px solid #293430; border-radius: 14px; background: #0c0e0f; }
 .management-form label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
+.management-form .template-checkbox-field { display: flex; min-height: 44px; align-items: center; gap: 8px; color: var(--text); font-size: 14px; cursor: pointer; }
+.management-form .template-checkbox-field input[type="checkbox"] { width: 20px; height: 20px; min-height: 0; accent-color: var(--accent); flex: none; }
 .management-form > div { display: flex; justify-content: end; gap: 8px; }
 .manager-list { display: grid; }
 .manager-row { display: flex; align-items: center; gap: 10px; min-height: 54px; padding: 8px 0; border-top: 1px solid var(--line); }
@@ -240,6 +242,7 @@ textarea { padding: 11px; resize: vertical; }
 .claim-ratio-preset-body { padding-top: 4px; }
 .claim-ratio-preset-hint { padding-top: 0; padding-bottom: 10px; }
 .batch-reimbursement-account-hint { padding-top: 0; padding-bottom: 10px; }
+.subcategory-claim-action { margin: 10px 0 4px; }
 .batch-reimbursement-account-field { display: grid; gap: 5px; margin-bottom: 10px; color: var(--muted); font-size: 12px; }
 .template-manager-hint { padding-top: 0; padding-bottom: 10px; }
 .save-as-template { margin-bottom: 8px; }
@@ -252,7 +255,9 @@ textarea { padding: 11px; resize: vertical; }
 .reimbursement-linked-info { margin: 18px 0 0; padding: 11px 12px; border: 1px solid #3c594d; border-radius: 12px; background: #1d3029; color: #c4dfd1; font-size: 12px; line-height: 1.45; }
 .claim-submitted-info { border-color: #38566b; background: #172a35; color: #c6e7ff; }
 .batch-reimbursement-details { margin-top: 10px; padding: 14px; border: 1px solid #38566b; border-radius: 14px; background: #0b151b; }
-.batch-reimbursement-details h3 { margin: 0 0 9px; color: #d8edff; font-size: 13px; }
+.batch-reimbursement-details .query-detail__heading { margin-bottom: 9px; }
+.batch-reimbursement-details h3 { margin: 0; color: #d8edff; font-size: 13px; }
+.batch-reimbursement-details strong { color: #d8edff; font-size: 13px; font-variant-numeric: tabular-nums; }
 .batch-reimbursement-note { margin: 0 0 12px; padding: 9px 10px; border-left: 2px solid #6ebaf1; background: rgba(80, 153, 202, .12); color: #c6e7ff; font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
 .batch-reimbursement-items { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .batch-reimbursement-items li { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; min-height: 39px; padding: 7px 0 7px 14px; border-bottom: 1px solid rgba(157, 207, 239, .13); color: #eaf5ff; font-size: 14px; }

@@ -78,7 +78,7 @@ export async function runStage8Tests() {
     assert(app.includes('claimAccountGroups(transactions)') && app.includes('data-select-claim-account') && app.includes('claim-selectable--blocked'), '候選項目沒有依帳戶分組或防止跨帳戶誤選。');
     assert(html.includes('id="claim-selected-count"') && html.includes('id="claim-selected-account"') && html.includes('id="claim-selected-total"'), '選取筆數、帳戶或合計金額摘要不完整。');
     assert(html.includes('id="clear-claim-selection"') && html.includes('id="cancel-batch-reimbursement"') && app.includes('clearClaimSelection') && app.includes('cancelBatchReimbursement'), '清除選取或取消整個流程的入口不完整。');
-    assert(html.includes('id="batch-reimbursement-confirm-dialog"') && html.includes('id="confirm-batch-reimbursement"') && app.includes('requestCreateBatchReimbursement') && app.includes("openSheet(batch.reimbursement.id)"), '建立前確認或建立後直接核對明細的流程不存在。');
+    assert(html.includes('id="action-dialog"') && html.includes('id="confirm-action-dialog"') && app.includes('requestCreateBatchReimbursement') && app.includes('onConfirm: createBatchReimbursement') && app.includes("openSheet(batch.reimbursement.id)"), '建立前確認或建立後直接核對明細的流程不存在。');
     assert(!app.includes('window.confirm(`將 ${selected.length} 筆支出合併為一筆'), '合併報銷確認不應仰賴原生 confirm 對話框（部分行動瀏覽器／PWA 環境可能不會正常顯示或被封鎖）。');
     assert(css.includes('.claim-selection-summary') && /\.text-action--compact\s*\{[^}]*min-height:\s*44px/.test(css) && /\.claim-account-group__heading \.button\s*\{[^}]*min-height:\s*44px/.test(css) && /\.claim-selection-controls \.button\s*\{[^}]*min-height:\s*44px/.test(css), '合併報銷摘要、入口、帳戶分組或手機觸控區樣式不完整。');
     assert(requirements.includes('合併報銷操作流程改善') && uxNotes.includes('合併報銷流程改善'), '合併報銷改善規格或紀錄未更新。');
@@ -112,7 +112,7 @@ export async function runStage8Tests() {
     assert(html.includes('id="toggle-claim-ratio-presets"') && html.includes('>展開<') && app.includes("body.hidden = expanded"), '請款比例選項清單缺少展開／收合切換。');
     assert(html.includes('id="claim-ratio-preset-input"') && html.includes('id="claim-ratio-preset-form"'), '設定頁缺少新增請款比例選項的輸入介面。');
   });
-  await test('常用範本可從記帳面板另存、於主頁一鍵套用，且管理與刪除集中在設定頁', async () => {
+  await test('常用範本可從記帳面板另存、於主頁一鍵套用，且新增、編輯與刪除集中在設定頁', async () => {
     const [app, html] = await Promise.all([read('app.js'), read('index.html')]);
     assert(html.includes('id="open-templates"') && /id="open-templates"[^>]*\bhidden\b/.test(html), '常用範本入口應在沒有範本時預設隱藏，且不應佔用主頁版面。');
     assert(app.includes('$(\'#open-templates\').hidden = state.templates.length === 0'), '常用範本入口沒有依範本數量動態顯示或隱藏。');
@@ -120,8 +120,9 @@ export async function runStage8Tests() {
     assert(html.includes('id="save-as-template"') && app.includes('async function saveCurrentFormAsTemplate') && app.includes("state.repository.setSetting('transaction-templates', state.templates)"), '記帳面板缺少另存為範本的入口或沒有持久化。');
     assert(app.includes('async function useTemplate') && app.includes('date: todayValue(), time: timeValue()') && app.includes('await state.repository.createTransaction(input)'), '套用範本沒有以目前日期時間直接新增交易。');
     assert(app.includes('function templateIsValid') && app.includes('帳戶或類別已刪除'), '範本沒有處理帳戶或類別已被刪除的情況。');
-    assert(html.includes('id="template-manager-list"') && app.includes('async function deleteTemplate') && !app.includes('function editTemplate'), '範本管理應在設定頁提供刪除，且維持只新增／刪除的最小操作。');
-    assert(app.includes("if (!['expense', 'income', 'transfer'].includes(form.type)) return { message: '目前交易類型不支援存為範本。' };"), '範本不應涵蓋借貸類型交易。');
+    assert(html.includes('id="template-manager-list"') && app.includes('async function deleteTemplate') && html.includes('id="template-form"') && app.includes('data-edit-template') && app.includes('function showTemplateForm'), '範本管理應在設定頁提供新增、編輯與刪除。');
+    assert(html.includes('id="template-planned-claim-input"') && app.includes('isPlannedClaim: form.isPlannedClaim === true') && app.includes("if (template.isPlannedClaim === true) Object.assign(input, { isPlannedClaim: true"), '範本沒有保留或套用預計請款狀態。');
+    assert(html.includes('id="mark-subcategory-planned-claims"') && app.includes('state.repository.markPlannedClaims('), '查詢子類別時缺少一次加入預計請款的功能。');    assert(app.includes("if (!['expense', 'income', 'transfer'].includes(form.type)) return { message: '目前交易類型不支援存為範本。' };"), '範本不應涵蓋借貸類型交易。');
   });
   await test('高頻記帳、首次使用、驗證與返回流程已完成便利性改善', async () => {
     const [app, dataLayer, html, css, requirements, uxNotes] = await Promise.all([read('app.js'), read('data-layer.js'), read('index.html'), read('styles.css'), read('PROJECT_REQUIREMENTS.md'), read('UX_IMPROVEMENTS.md')]);
